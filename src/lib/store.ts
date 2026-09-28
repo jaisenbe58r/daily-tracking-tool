@@ -1,0 +1,179 @@
+import { useEffect, useReducer } from 'react'
+import type { Status, Task } from './types'
+import * as tree from './tree'
+
+export type Caret = number | 'start' | 'end'
+
+export interface Focus {
+  id: string
+  target: 'text' | 'notes'
+  caret: Caret
+  /** Bumped on every request so the same row can be re-focused. */
+  seq: number
+}
+
+export interface State {
+  tasks: Task[]
+  focus: Focus | null
+}
+
+export type Action =
+  | { type: 'edit'; id: string; patch: Partial<Pick<Task, 'text' | 'notes' | 'tags'>> }
+  | { type: 'commit'; id: string }
+  | { type: 'add-after'; id: string }
+  | { type: 'add-child'; id: string }
+  | { type: 'add-end' }
+  | { type: 'indent'; id: string; caret?: Caret }
+  | { type: 'outdent'; id: string; caret?: Caret }
+  | { type: 'move-up'; id: string; caret?: Caret }
+  | { type: 'move-down'; id: string; caret?: Caret }
+  | { type: 'move-to'; id: string; parentId: string | null; beforeId: string | null }
+  | { type: 'set-status'; id: string; status: Status }
+  | { type: 'toggle-done'; id: string }
+  | { type: 'toggle-collapse'; id: string }
+  | { type: 'remove'; id: string; focusPrev?: boolean }
+  | { type: 'focus'; id: string; target?: Focus['target']; caret?: Caret }
+  | { type: 'replace'; tasks: Task[] }
+
+const STORAGE_KEY = 'daily-tracking-tool:v1'
+
+let seq = 0
+const focusOn = (id: string, caret: Caret = 'end', target: Focus['target'] = 'text'): Focus => ({
+  id,
+  caret,
+  target,
+  seq: ++seq,
+})
+
+function withStatus(task: Task, status: Status): Partial<Task> {
+  return { status, completedAt: status === 'done' ? (task.completedAt ?? Date.now()) : null }
+}
+
+function reducer(state: State, action: Action): State {
+  const { tasks } = state
+  const find = (id: string) => tasks.find((t) => t.id === id)
+
+  switch (action.type) {
+    case 'edit':
+      return { ...state, tasks: tree.update(tasks, action.id, action.patch) }
+
+    case 'commit': {
+      const task = find(action.id)
+      if (!task) return state
+      const { text, tags } = tree.extractTags(task.text)
+      if (!tags.length && text === task.text) return state
+      const merged = [...new Set([...task.tags, ...tags])]
+      return { ...state, tasks: tree.update(tasks, task.id, { text, tags: merged }) }
+    }
+
+    case 'add-after': {
+      const created = tree.newTask()
+      return { tasks: tree.insertAfter(tasks, action.id, created), focus: focusOn(created.id) }
+    }
+
+    case 'add-child': {
+      const created = tree.newTask(action.id)
+      const firstChild = tree.childrenOf(tasks, action.id)[0]
+      const expanded = tree.update(tasks, action.id, { collapsed: false })
+      return { tasks: tree.place(expanded, created, action.id, firstChild?.id ?? null), focus: focusOn(created.id) }
+    }
+
+    case 'add-end': {
+      const created = tree.newTask()
+      return { tasks: [...tasks, created], focus: focusOn(created.id) }
+    }
+
+    case 'indent':
+      return { tasks: tree.indent(tasks, action.id), focus: keepFocus(state, action.id, action.caret) }
+    case 'outdent':
+      return { tasks: tree.outdent(tasks, action.id), focus: keepFocus(state, action.id, action.caret) }
+    case 'move-up':
+      return { tasks: tree.moveUp(tasks, action.id), focus: keepFocus(state, action.id, action.caret) }
+    case 'move-down':
+      return { tasks: tree.moveDown(tasks, action.id), focus: keepFocus(state, action.id, action.caret) }
+    case 'move-to':
+      return { ...state, tasks: tree.moveTo(tasks, action.id, action.parentId, action.beforeId) }
+
+    case 'set-status': {
+      const task = find(action.id)
+      return task ? { ...state, tasks: tree.update(tasks, task.id, withStatus(task, action.status)) } : state
+    }
+
+    case 'toggle-done': {
+      const task = find(action.id)
+      if (!task) return state
+      const status: Status = task.status === 'done' ? 'todo' : 'done'
+      return { ...state, tasks: tree.update(tasks, task.id, withStatus(task, status)) }
+    }
+
+    case 'toggle-collapse': {
+      const task = find(action.id)
+      if (!task || !tree.hasChildren(tasks, task.id)) return state
+      return { ...state, tasks: tree.update(tasks, task.id, { collapsed: !task.collapsed }) }
+    }
+
+    case 'remove': {
+      const rows = tree.flatten(tasks)
+      const i = rows.findIndex((r) => r.task.id === action.id)
+      let next = tree.remove(tasks, action.id)
+      if (!next.length) next = [tree.newTask()]
+      const neighbour = rows[i - 1]?.task ?? rows[i + 1]?.task ?? next[0]
+      return {
+        tasks: next,
+        focus: action.focusPrev === false ? null : focusOn(neighbour.id === action.id ? next[0].id : neighbour.id),
+      }
+    }
+
+    case 'focus':
+      return { ...state, focus: focusOn(action.id, action.caret, action.target) }
+
+    case 'replace':
+      return { ...state, tasks: action.tasks.length ? action.tasks : [tree.newTask()] }
+  }
+}
+
+function keepFocus(state: State, id: string, caret: Caret = 'end'): Focus {
+  return focusOn(id, caret, state.focus?.id === id ? state.focus.target : 'text')
+}
+
+function load(): Task[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    const tasks = raw ? (JSON.parse(raw).tasks as Task[]) : []
+    if (Array.isArray(tasks) && tasks.length) return tasks
+  } catch {
+    // Corrupt or unavailable storage: start with a blank sheet.
+  }
+  return [tree.newTask()]
+}
+
+function init(): State {
+  const tasks = load()
+  return { tasks, focus: tasks.length === 1 && !tasks[0].text ? focusOn(tasks[0].id) : null }
+}
+
+export function useTasks() {
+  const [state, dispatch] = useReducer(reducer, undefined, init)
+
+  // Autosave, lightly debounced so typing doesn't serialise on every key.
+  useEffect(() => {
+    const save = () => localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, tasks: state.tasks }))
+    const timer = setTimeout(save, 150)
+    window.addEventListener('beforeunload', save)
+    return () => {
+      clearTimeout(timer)
+      window.removeEventListener('beforeunload', save)
+    }
+  }, [state.tasks])
+
+  // Keep several open tabs in sync.
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === STORAGE_KEY && e.newValue) dispatch({ type: 'replace', tasks: JSON.parse(e.newValue).tasks })
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [])
+
+  return [state, dispatch] as const
+}
