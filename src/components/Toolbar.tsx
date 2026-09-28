@@ -15,10 +15,13 @@ interface Props {
   tags: string[]
   onSort: (mode: SortMode) => void
   onFilters: (filters: Filters) => void
+  /** Name of the task in focus mode, if any. */
+  focusName: string | null
+  onExitFocus: () => void
 }
 
 /** Deliberately quiet: small mono labels that only turn ink when active. */
-export function Toolbar({ view, sort, filters, tags, onSort, onFilters }: Props) {
+export function Toolbar({ view, sort, filters, tags, onSort, onFilters, focusName, onExitFocus }: Props) {
   return (
     <div className="toolbar">
       {view === 'list' && (
@@ -33,6 +36,11 @@ export function Toolbar({ view, sort, filters, tags, onSort, onFilters }: Props)
       )}
 
       <div className="tool">
+        {focusName !== null && (
+          <button aria-pressed title="Salir del modo foco (Alt+F)" className="focus-chip" onClick={onExitFocus}>
+            Foco · {focusName || 'Sin título'} ×
+          </button>
+        )}
         <button
           aria-pressed={filters.today}
           title="Solo lo planificado para hoy o vencido (Alt+T)"

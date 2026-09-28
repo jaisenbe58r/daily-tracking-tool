@@ -1,6 +1,6 @@
 import type { Filters, Group, Row, SortMode, Status, Task } from './types'
 import { flatten } from './tree'
-import { dateKey } from './parse'
+import { dateKey, fold } from './parse'
 
 export const STATUS_LABEL: Record<Status, string> = { todo: 'Pendiente', doing: 'En curso', done: 'Hecha' }
 
@@ -8,6 +8,12 @@ export const STATUS_LABEL: Record<Status, string> = { todo: 'Pendiente', doing: 
 export function matches(task: Task, filters: Filters, today: string): boolean {
   if (filters.hideDone && task.status === 'done') return false
   if (filters.tag && !task.tags.includes(filters.tag)) return false
+  // Every word must appear somewhere (text, notes or tags), in any order.
+  const words = fold(filters.query).split(/\s+/).filter(Boolean)
+  const haystack = words.length ? fold(`${task.text} ${task.notes} ${task.tags.join(' ')}`) : ''
+  if (words.some((w) => !haystack.includes(w.replace(/^#/, '')))) {
+    return false
+  }
   if (filters.today) {
     const planned = task.status !== 'done' && task.due !== null && task.due <= today
     const doneToday = task.status === 'done' && task.completedAt !== null && dateKey(new Date(task.completedAt)) === today
@@ -17,7 +23,7 @@ export function matches(task: Task, filters: Filters, today: string): boolean {
 }
 
 export function isFiltering(filters: Filters) {
-  return filters.hideDone || filters.today || filters.tag !== null
+  return filters.hideDone || filters.today || filters.tag !== null || filters.query.trim() !== ''
 }
 
 /** What a new task needs so it stays visible under the active filters. */

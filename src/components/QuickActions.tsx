@@ -7,24 +7,27 @@ const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigat
 const M = isMac ? '⌘' : 'Ctrl '
 const A = isMac ? '⌥' : 'Alt '
 
-interface Item {
+export interface QuickItem {
   label: string
   hint?: string
   keywords?: string
   run: () => void
+  /** Only listed once the user types something that matches (rare or destructive actions). */
+  searchOnly?: boolean
 }
+type Item = QuickItem
 
 interface Props {
   task: Task
   hasChildren: boolean
   anchor: DOMRect
   dispatch: (action: Action) => void
-  onExport: () => void
-  onImport: () => void
+  /** App-wide actions (templates, summary, backup…) listed after the task's own. */
+  extra: QuickItem[]
   onClose: (refocus: boolean) => void
 }
 
-export function QuickActions({ task, hasChildren, anchor, dispatch, onExport, onImport, onClose }: Props) {
+export function QuickActions({ task, hasChildren, anchor, dispatch, extra, onClose }: Props) {
   const [query, setQuery] = useState('')
   const [active, setActive] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -88,15 +91,11 @@ export function QuickActions({ task, hasChildren, anchor, dispatch, onExport, on
       })
     }
     list.push({ label: 'Eliminar', keywords: 'borrar delete', run: () => dispatch({ type: 'remove', id }) })
-    list.push(
-      { label: 'Exportar copia', hint: `${M}S`, keywords: 'backup json guardar descargar', run: onExport },
-      { label: 'Importar copia', hint: `${M}O`, keywords: 'backup json abrir cargar restaurar', run: onImport },
-    )
-    return list
-  }, [dispatch, id, task.status, task.text, task.collapsed, task.due, task.priority, today, hasChildren, onExport, onImport])
+    return [...list, ...extra]
+  }, [dispatch, id, task.status, task.text, task.collapsed, task.due, task.priority, today, hasChildren, extra])
 
   const q = query.trim().toLowerCase()
-  const filtered = q ? items.filter((i) => `${i.label} ${i.keywords ?? ''}`.toLowerCase().includes(q)) : items
+  const filtered = q ? items.filter((i) => `${i.label} ${i.keywords ?? ''}`.toLowerCase().includes(q)) : items.filter((i) => !i.searchOnly)
   const current = Math.min(active, Math.max(filtered.length - 1, 0))
 
   useLayoutEffect(() => inputRef.current?.focus(), [])

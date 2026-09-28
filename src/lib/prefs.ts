@@ -7,10 +7,12 @@ export interface Prefs {
   view: View
   sort: SortMode
   filters: Filters
+  /** Last day the app was opened, to raise unfinished tasks once per new day. */
+  lastDay: string | null
 }
 
 const KEY = 'daily-tracking-tool:prefs'
-const DEFAULTS: Prefs = { view: 'list', sort: 'manual', filters: { tag: null, hideDone: false, today: false } }
+const DEFAULTS: Prefs = { view: 'list', sort: 'manual', filters: { tag: null, hideDone: false, today: false, query: '' }, lastDay: null }
 
 function load(): Prefs {
   try {
@@ -22,7 +24,9 @@ function load(): Prefs {
         tag: typeof raw.filters?.tag === 'string' ? raw.filters.tag : null,
         hideDone: raw.filters?.hideDone === true,
         today: raw.filters?.today === true,
+        query: '',
       },
+      lastDay: typeof raw.lastDay === 'string' ? raw.lastDay : null,
     }
   } catch {
     return DEFAULTS

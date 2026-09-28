@@ -3,6 +3,7 @@ import type { Inherit, Status, Task } from './types'
 import * as tree from './tree'
 import { STORAGE_KEY, load, parse, save } from './persist'
 import { dateKey, parseOutline, parseTask } from './parse'
+import { carryOver } from './daily'
 
 export type Caret = number | 'start' | 'end'
 
@@ -40,6 +41,8 @@ export type Action =
   | { type: 'toggle-priority'; id: string }
   /** Replaces everything (JSON import), as one undoable step. */
   | { type: 'import'; tasks: Task[] }
+  /** New day: raise what's still open from earlier days. */
+  | { type: 'carry-over'; today: string }
   | { type: 'add-child'; id: string }
   | { type: 'add-end'; inherit?: Inherit }
   | { type: 'indent'; id: string; caret?: Caret }
@@ -146,6 +149,9 @@ function reducer(state: State, action: Exclude<Action, { type: 'undo' | 'redo' }
       const task = find(action.id)
       return task ? { ...state, tasks: tree.update(tasks, task.id, { priority: !task.priority }) } : state
     }
+
+    case 'carry-over':
+      return { ...state, tasks: carryOver(tasks, action.today) }
 
     case 'import':
       return { tasks: action.tasks.length ? action.tasks : [tree.newTask()], focus: null }

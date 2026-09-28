@@ -211,6 +211,8 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 }
 .row:hover, .row:focus-within { background: var(--wash); }
 .row[data-dragging] { opacity: 0.35; }
+.row[data-faded] { opacity: 0.16; transition: opacity 200ms; }
+.row[data-faded]:hover, .row[data-faded]:focus-within { opacity: 0.6; }
 .row[data-dimmed] .text,
 .row[data-dimmed] .check { opacity: 0.4; }
 
@@ -428,6 +430,8 @@ textarea::placeholder { color: color-mix(in srgb, var(--grey) 60%, var(--paper))
   transition: opacity 120ms;
 }
 .row:hover .date { opacity: 1; }
+/* Written on an earlier day and still open: a quiet age in days. */
+.date[data-stale] { color: var(--ink); opacity: 0.55; }
 
 .notes {
   margin: 2px 0 4px;
@@ -565,6 +569,80 @@ textarea::placeholder { color: color-mix(in srgb, var(--grey) 60%, var(--paper))
 .add-card::placeholder { color: var(--grey); }
 .add-card:hover { border-color: color-mix(in srgb, var(--ink) 35%, var(--paper)); }
 .add-card:focus { border-style: solid; border-color: var(--ink); }
+
+/* ── Search (Cmd/Ctrl+F) ─────────────────────────────── */
+
+.search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 36px;
+  padding: 0 2px;
+  border-bottom: 1px solid var(--ink);
+  color: var(--grey);
+  animation: row-in 140ms var(--ease);
+}
+.search-input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 15px;
+  color: var(--ink);
+}
+.search-input::placeholder { color: var(--grey); }
+.search-count {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.tool button.focus-chip { color: var(--ink); }
+
+/* ── Quick capture (Cmd/Ctrl+K) ──────────────────────── */
+
+.capture-backdrop { background: color-mix(in srgb, var(--paper) 55%, transparent); backdrop-filter: blur(2px); }
+.capture {
+  position: fixed;
+  top: 18vh;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: min(560px, calc(100vw - 32px));
+  height: 52px;
+  padding: 0 16px;
+  transform: translateX(-50%);
+  background: var(--paper);
+  border: 1px solid var(--ink);
+  border-radius: 10px;
+  box-shadow: 0 24px 48px -24px color-mix(in srgb, var(--ink) 40%, transparent);
+  animation: capture-in 160ms var(--ease);
+}
+@keyframes capture-in {
+  from { opacity: 0; transform: translate(-50%, -6px) scale(0.98); }
+}
+.capture-check {
+  flex: 0 0 16px;
+  height: 16px;
+  border: 1.25px solid var(--ink-soft);
+  border-radius: 4px;
+}
+.capture-input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 16px;
+  color: var(--ink);
+}
+.capture-input::placeholder { color: color-mix(in srgb, var(--grey) 60%, var(--paper)); }
 
 /* ── Toast ───────────────────────────────────────────── */
 

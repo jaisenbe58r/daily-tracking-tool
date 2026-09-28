@@ -39,6 +39,8 @@ export interface Filters {
   hideDone: boolean
   /** Only what's planned for today or overdue, plus what got done today. */
   today: boolean
+  /** Instant search (Cmd/Ctrl+F) over text, notes and tags. Not remembered between visits. */
+  query: string
 }
 
 export interface Group {

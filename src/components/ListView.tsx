@@ -2,7 +2,7 @@ import { useCallback, useRef, useState, type PointerEvent as ReactPointerEvent }
 import type { Action, AppState } from '../lib/store'
 import { childrenOf, descendantIds, flatten, nextSibling } from '../lib/tree'
 import type { Group, Row } from '../lib/types'
-import { QuickActions } from './QuickActions'
+import { QuickActions, type QuickItem } from './QuickActions'
 import { TaskRow } from './TaskRow'
 
 const INDENT = 24
@@ -26,11 +26,13 @@ interface Props {
   grouped: boolean
   activeTag: string | null
   onTagClick: (tag: string) => void
-  onExport: () => void
-  onImport: () => void
+  /** App-wide entries for the "/" menu, built for the task it was opened on. */
+  extraActions: (taskId: string) => QuickItem[]
+  /** Focus mode: every task outside this set is faded. */
+  focused: Set<string> | null
 }
 
-export function ListView({ state, dispatch, groups, structural, grouped, activeTag, onTagClick, onExport, onImport }: Props) {
+export function ListView({ state, dispatch, groups, structural, grouped, activeTag, onTagClick, extraActions, focused }: Props) {
   const listRef = useRef<HTMLDivElement>(null)
   const [actionsFor, setActionsFor] = useState<{ id: string; anchor: DOMRect } | null>(null)
   const [drag, setDrag] = useState<Drag | null>(null)
@@ -137,6 +139,7 @@ export function ListView({ state, dispatch, groups, structural, grouped, activeT
                 row={row}
                 focus={state.focus?.id === row.task.id ? state.focus : null}
                 dragging={!!drag?.moving.has(row.task.id)}
+                faded={!!focused && !focused.has(row.task.id)}
                 dispatch={dispatch}
                 onOpenActions={openActions}
                 onDragStart={startDrag}
@@ -160,8 +163,7 @@ export function ListView({ state, dispatch, groups, structural, grouped, activeT
           hasChildren={actionsRow.hasChildren}
           anchor={actionsFor.anchor}
           dispatch={dispatch}
-          onExport={onExport}
-          onImport={onImport}
+          extra={extraActions(actionsRow.task.id)}
           onClose={(refocus) => {
             setActionsFor(null)
             if (refocus) dispatch({ type: 'focus', id: actionsFor.id })

@@ -2,6 +2,8 @@ import { memo, useLayoutEffect, useRef, useState, type KeyboardEvent, type Point
 import type { Action, Focus } from '../lib/store'
 import type { Group, Row } from '../lib/types'
 import { DueLabel } from './DueLabel'
+import { ageInDays, isStale } from '../lib/daily'
+import { useToday } from '../lib/today'
 
 interface Props {
   row: Row
@@ -15,6 +17,7 @@ interface Props {
   /** Attributes a task created from this row inherits (its group, the active tag filter). */
   inherit: Group['inherit']
   activeTag: string | null
+  faded: boolean
   onTagClick: (tag: string) => void
 }
 
@@ -34,7 +37,9 @@ function isSingleLine(el: HTMLTextAreaElement) {
   return el.scrollHeight <= parseFloat(getComputedStyle(el).lineHeight) * 1.5
 }
 
-function TaskRowImpl({ row, focus, dragging, dispatch, onOpenActions, onDragStart, structural, inherit, activeTag, onTagClick }: Props) {
+function TaskRowImpl({ row, focus, dragging, dispatch, onOpenActions, onDragStart, structural, inherit, activeTag, onTagClick, faded }: Props) {
+  const today = useToday()
+  const stale = isStale(row.task, today)
   const { task, depth, hasChildren, lastPath, context, dimmed } = row
   const textRef = useRef<HTMLTextAreaElement>(null)
   const notesRef = useRef<HTMLTextAreaElement>(null)
@@ -147,6 +152,7 @@ function TaskRowImpl({ row, focus, dragging, dispatch, onOpenActions, onDragStar
       data-status={task.status}
       data-dragging={dragging || undefined}
       data-dimmed={dimmed || undefined}
+      data-faded={faded || undefined}
       style={{ '--depth': depth } as React.CSSProperties}
     >
       {structural && (
@@ -247,8 +253,13 @@ function TaskRowImpl({ row, focus, dragging, dispatch, onOpenActions, onDragStar
               </svg>
             </button>
           )}
-          <time className="date" dateTime={new Date(task.createdAt).toISOString()} title={`Creada el ${fullDateFmt.format(task.createdAt)}`}>
-            {dateFmt.format(task.createdAt).replace('.', '')}
+          <time
+            className="date"
+            data-stale={stale || undefined}
+            dateTime={new Date(task.createdAt).toISOString()}
+            title={`Creada el ${fullDateFmt.format(task.createdAt)}`}
+          >
+            {stale ? `${ageInDays(task, today)} d` : dateFmt.format(task.createdAt).replace('.', '')}
           </time>
         </div>
         {showNotes && (

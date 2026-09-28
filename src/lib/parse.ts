@@ -33,7 +33,7 @@ function addDays(base: Date, days: number): Date {
   return d
 }
 
-const fold = (s: string) => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '')
+export const fold = (s: string) => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '')
 
 /** Resolves one date phrase, or null when it isn't one. */
 export function resolveDate(phrase: string, now: Date): string | null {

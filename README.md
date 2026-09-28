@@ -29,6 +29,18 @@ Al pulsar Enter (o salir de la línea), el texto se interpreta:
 
 **Hoy** (`Alt+T`, o «Hoy» encima de la lista) muestra solo lo planificado para hoy o vencido, más lo que has cerrado hoy. `Alt+H` planifica o desplanifica la tarea actual para hoy.
 
+**Captura global** (`Cmd/Ctrl+K`): una línea flotante para apuntar algo sin perder el sitio. Enter la guarda (con la misma gramática) y el cursor vuelve a donde estabas; `Esc` la descarta.
+
+**Buscar** (`Cmd/Ctrl+F`): filtra al escribir por texto, notas y tags, sin acentos y con las palabras en cualquier orden. Enter salta al primer resultado; `Esc` limpia la búsqueda.
+
+**Modo foco** (`Alt+F` sobre una tarea): todo lo que no es esa tarea y sus subtareas se atenúa. Se sale con `Alt+F` otra vez o con la etiqueta «Foco» de arriba.
+
+**Día nuevo**: la primera vez que abres la hoja cada día, lo que quedó abierto de días anteriores sube arriba, y su fecha se cambia por la edad (`3 d`) para que se note lo que se arrastra.
+
+**Resumen del día** (`Alt+R`): copia al portapapeles un Markdown con lo hecho hoy (con su proyecto) y lo que está en curso, listo para pegar en un chat o un correo.
+
+**Plantillas**: en `/`, «Guardar como plantilla» guarda la tarea con sus subtareas; luego «Plantilla · nombre» la inserta (sin estados ni fechas). Para borrar una, escribe «borrar» en el menú. Las plantillas viajan en la copia JSON.
+
 **Copia de seguridad**: `Cmd/Ctrl+S` descarga todo en JSON; `Cmd/Ctrl+O` (o soltar el archivo sobre la página) lo restaura. Importar reemplaza la hoja y se puede deshacer.
 
 ## Teclado
@@ -48,6 +60,10 @@ Al pulsar Enter (o salir de la línea), el texto se interpreta:
 | `Cmd/Ctrl+Z` · `Cmd/Ctrl+Shift+Z` | Deshacer · rehacer (texto y estructura) |
 | `Alt+H` | Planificar para hoy (o quitarlo) |
 | `Alt+T` | Vista Hoy |
+| `Cmd/Ctrl+K` | Captura global |
+| `Cmd/Ctrl+F` | Buscar |
+| `Alt+F` | Modo foco en la tarea actual |
+| `Alt+R` | Copiar el resumen del día |
 | `Cmd/Ctrl+S` · `Cmd/Ctrl+O` | Exportar · importar copia JSON |
 
 En el **Board** (`Alt+2`, o `Alt+1` para volver a la lista):
@@ -81,8 +97,10 @@ La vista, el orden y los filtros se recuerdan en cada navegador.
 - `src/lib/parse.ts`: la gramática de captura (`#tag`, `!`, fechas) y el pegado de listas.
 - `src/lib/backup.ts`: exportar e importar JSON.
 - `src/lib/organize.ts`: ordenar, agrupar y filtrar (puro, con tests).
+- `src/lib/daily.ts`: día nuevo (tareas arrastradas y su edad) y resumen en Markdown.
+- `src/lib/templates.ts`: plantillas guardadas.
 - `src/lib/prefs.ts`: vista, orden y filtros recordados por navegador.
-- `src/components/`: `ListView` y `TaskRow` (folio), `BoardView` (kanban), `Toolbar` y el menú `/`.
+- `src/components/`: `ListView` y `TaskRow` (folio), `BoardView` (kanban), `Toolbar`, el menú `/`, `QuickCapture` y `SearchBar`.
 
 Cada tarea guarda `status` (`todo` · `doing` · `done`), `tags` y `createdAt`: la lista y el Board son dos vistas de los mismos datos.
 
