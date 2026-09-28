@@ -14,6 +14,7 @@ import { TodayContext } from './lib/today'
 import { dailySummary, subtreeOutline } from './lib/daily'
 import { useTemplates } from './lib/templates'
 import { descendantIds } from './lib/tree'
+import { useAi } from './ai/useAi'
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
 const M = isMac ? '⌘' : 'Ctrl '
@@ -37,9 +38,12 @@ export default function App() {
   const fileRef = useRef<HTMLInputElement>(null)
   const { templates, save: saveTemplate, remove: removeTemplate, replaceAll: replaceTemplates } = useTemplates()
   const [capturing, setCapturing] = useState(false)
+  /** What the capture line opens with: the task it's about (AI context) and any text to send right away. */
+  const [seed, setSeed] = useState<{ taskId: string | null; text: string }>({ taskId: null, text: '' })
   const [searching, setSearching] = useState(false)
   const [focusId, setFocusId] = useState<string | null>(null)
   const todayKey = dateKey(today)
+  const ai = useAi(state.tasks, todayKey)
 
   // Latest values for handlers registered once.
   const latest = useRef({ tasks: state.tasks, templates, focusId, todayKey })
@@ -122,6 +126,11 @@ export default function App() {
       if (!active || active === document.body) returnTo.current?.focus?.()
     })
 
+  const closeCapture = () => {
+    if (!returnTo.current && seed.taskId && state.tasks.some((t) => t.id === seed.taskId)) dispatch({ type: 'focus', id: seed.taskId })
+    else restoreFocus()
+  }
+
   /** The task whose row (or card) has keyboard focus. */
   const activeTaskId = () => {
     const el = document.activeElement as HTMLElement | null
@@ -131,11 +140,32 @@ export default function App() {
     setFocusId((cur) => (cur && (cur === id || !id) ? null : id))
   }, [])
 
+  const { ask } = ai
+  /** Opens the capture line about a task; with `request`, asks the AI at once. */
+  const openAi = useCallback(
+    (taskId: string, request = '') => {
+      returnTo.current = null
+      setSeed({ taskId, text: request })
+      setCapturing(true)
+      if (request) void ask(request, taskId)
+    },
+    [ask],
+  )
+
   const extraActions = useCallback(
     (taskId: string): QuickItem[] => {
       const task = state.tasks.find((t) => t.id === taskId)
       const name = task?.text.trim()
       return [
+        ...(ai.available
+          ? [
+              ...(name
+                ? [{ label: 'Dividir en pasos', hint: 'IA', keywords: 'ia ai split dividir descomponer subtareas pasos', run: () =>
+                    openAi(taskId, `Divide en pasos la tarea seleccionada: «${name}»`) }]
+                : []),
+              { label: 'Pedir a la IA…', hint: 'IA', keywords: 'ia ai pedir orden cambiar', run: () => openAi(taskId) },
+            ]
+          : []),
         { label: focusId === taskId ? 'Salir del foco' : 'Modo foco', hint: `${A}F`, keywords: 'foco focus concentrar', run: () => toggleFocusMode(taskId) },
         ...(name
           ? [{ label: 'Guardar como plantilla', keywords: 'plantilla template', run: () => {
@@ -165,7 +195,7 @@ export default function App() {
         { label: 'Importar copia', hint: `${M}O`, keywords: 'backup json abrir cargar restaurar', run: openImport },
       ]
     },
-    [state.tasks, templates, focusId, toggleFocusMode, saveTemplate, removeTemplate, notify, dispatch, copySummary, exportAll, openImport],
+    [state.tasks, templates, focusId, toggleFocusMode, saveTemplate, removeTemplate, notify, dispatch, copySummary, exportAll, openImport, ai.available, openAi],
   )
 
   const setView = useCallback((v: View) => setPrefs((p) => ({ ...p, view: v })), [setPrefs])
@@ -188,6 +218,7 @@ export default function App() {
         } else if (key === 'k') {
           e.preventDefault()
           returnTo.current = document.activeElement as HTMLElement | null
+          setSeed({ taskId: activeTaskId(), text: '' })
           setCapturing(true)
         } else if (key === 'f') {
           e.preventDefault()
@@ -333,16 +364,40 @@ export default function App() {
 
         {capturing && (
           <QuickCapture
+            initialText={seed.text}
             onCapture={(text) => {
               dispatch({ type: 'create', text, status: 'todo', inherit: inheritFromFilters(effective, todayKey) })
               setCapturing(false)
               notify(`Apuntada: ${parseTask(text).text || text.trim()}`)
-              restoreFocus()
+              closeCapture()
             }}
             onClose={() => {
               setCapturing(false)
-              restoreFocus()
+              closeCapture()
             }}
+            ai={
+              ai.available
+                ? {
+                    job: ai.job,
+                    onAsk: (text) => void ai.ask(text, seed.taskId),
+                    onCancel: ai.cancel,
+                    onApply: () => {
+                      if (ai.job?.phase !== 'proposal') return
+                      // Another tab (or undo) changed the sheet meanwhile: applying would overwrite it.
+                      if (ai.job.base !== state.tasks) {
+                        notify('La hoja ha cambiado. Vuelve a pedirlo con ' + (isMac ? '⌘↵' : 'Ctrl+↵'))
+                        ai.cancel()
+                        return
+                      }
+                      dispatch({ type: 'apply', tasks: ai.job.next })
+                      notify(`${ai.job.summary} · ${isMac ? '⌘' : 'Ctrl+'}Z deshace`)
+                      ai.cancel()
+                      setCapturing(false)
+                      closeCapture()
+                    },
+                  }
+                : null
+            }
           />
         )}
 

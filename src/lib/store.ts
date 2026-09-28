@@ -56,6 +56,8 @@ export type Action =
   | { type: 'remove'; id: string; focusPrev?: boolean }
   | { type: 'focus'; id: string; target?: Focus['target']; caret?: Caret }
   | { type: 'replace'; tasks: Task[] }
+  /** A whole-sheet change proposed by the AI and accepted by the user: one undo step. */
+  | { type: 'apply'; tasks: Task[] }
   | { type: 'undo' }
   | { type: 'redo' }
 
@@ -211,6 +213,9 @@ function reducer(state: State, action: Exclude<Action, { type: 'undo' | 'redo' }
 
     case 'focus':
       return { ...state, focus: focusOn(action.id, action.caret, action.target) }
+
+    case 'apply':
+      return { ...state, tasks: action.tasks.length ? action.tasks : [tree.newTask()] }
 
     case 'replace':
       return { ...state, tasks: action.tasks.length ? action.tasks : [tree.newTask()] }

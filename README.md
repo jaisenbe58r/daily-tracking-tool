@@ -43,6 +43,27 @@ Al pulsar Enter (o salir de la línea), el texto se interpreta:
 
 **Copia de seguridad**: `Cmd/Ctrl+S` descarga todo en JSON; `Cmd/Ctrl+O` (o soltar el archivo sobre la página) lo restaura. Importar reemplaza la hoja y se puede deshacer.
 
+## IA (opcional)
+
+La IA trabaja por detrás de lo que ya existe, sin ventana de chat. Propone y tú decides: cada respuesta llega como una vista previa bajo la línea de captura, `Enter` la aplica (un solo `Cmd/Ctrl+Z` la deshace) y `Esc` la descarta.
+
+- **Volcado**: en `Cmd/Ctrl+K`, escribe o pega algo desordenado («el jueves demo Captia, antes revisar alarmas ZimVie y validar el torno 04») y pulsa `Cmd/Ctrl+Enter`. Sale un árbol con subtareas, tags y fechas. `Enter` sigue apuntando la línea tal cual, sin IA.
+- **Órdenes**: en la misma línea, «mueve lo de ZimVie a mañana y márcalo #urgente», «completa lo de Copilot». Si abres `Cmd/Ctrl+K` desde una tarea, «esta» es esa tarea.
+- **Dividir en pasos**: en `/`, «Dividir en pasos» propone de 3 a 6 subtareas. «Pedir a la IA…» abre la línea sobre esa tarea.
+
+Solo se envía algo al modelo cuando lo pides: tu petición y una lista compacta de las tareas (texto, estado, tags, fecha). Nada en segundo plano.
+
+**Activarla en local**: crea `.env.local` con tu clave y arranca como siempre.
+
+```bash
+echo "ANTHROPIC_API_KEY=sk-ant-..." > .env.local
+npm run dev
+```
+
+Sin clave, la app funciona igual y las acciones de IA no aparecen. `AI_MODEL` cambia el modelo (por defecto `anthropic/claude-haiku-4-5`; también vale `openai/...` o `google/...` con su clave).
+
+**Cómo está hecho**: [CopilotKit](https://github.com/CopilotKit/CopilotKit) v2 sin su UI de chat. En el navegador, `src/ai/` usa el núcleo de CopilotKit (cargado solo al primer uso) con una herramienta de frontend, `propose_changes`, cuyas operaciones (`add`, `update`, `move`, `remove`) se aplican con las mismas funciones del árbol que usa el teclado (`src/ai/ops.ts`). En el servidor, `server/ai.ts` es el runtime de CopilotKit con un `BuiltInAgent` obligado a responder siempre con esa herramienta; Vite lo sirve en `/api/ai` en `dev` y `preview`. Para publicarlo fuera de local, `createAiHandler()` devuelve un handler Fetch estándar que corre en Cloudflare Workers, Vercel, Netlify, Deno o Bun; si vive en otro dominio, `VITE_AI_URL` apunta la app a él.
+
 ## Teclado
 
 | Tecla | Acción |
