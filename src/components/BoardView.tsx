@@ -1,8 +1,10 @@
 import { useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
-import { parentPath } from '../lib/organize'
+import { inheritFromFilters, matches, parentPath } from '../lib/organize'
 import type { Action } from '../lib/store'
+import { DueLabel } from './DueLabel'
+import { useToday } from '../lib/today'
 import { flatten } from '../lib/tree'
-import type { Status, Task } from '../lib/types'
+import type { Filters, Inherit, Status, Task } from '../lib/types'
 
 const COLUMNS: { status: Status; label: string }[] = [
   { status: 'todo', label: 'To do' },
@@ -27,11 +29,14 @@ interface Drag {
 interface Props {
   tasks: Task[]
   dispatch: (action: Action) => void
-  activeTag: string | null
+  /** Done cards always show on the board; `hideDone` is a list-only setting. */
+  filters: Filters
   onTagClick: (tag: string) => void
 }
 
-export function BoardView({ tasks, dispatch, activeTag, onTagClick }: Props) {
+export function BoardView({ tasks, dispatch, filters, onTagClick }: Props) {
+  const activeTag = filters.tag
+  const today = useToday()
   const [drag, setDrag] = useState<Drag | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
   const [focusCard, setFocusCard] = useState<{ id: string } | null>(null)
@@ -43,12 +48,12 @@ export function BoardView({ tasks, dispatch, activeTag, onTagClick }: Props) {
     const open = tasks.map((t) => (t.collapsed ? { ...t, collapsed: false } : t))
     return flatten(open)
       .map((r) => byId.get(r.task.id)!)
-      .filter((t) => t.text.trim() && (!activeTag || t.tags.includes(activeTag)))
+      .filter((t) => t.text.trim() && matches(t, { ...filters, hideDone: false }, today))
       .map((task) => {
         const kids = tasks.filter((t) => t.parentId === task.id)
         return { task, context: parentPath(byId, task), done: kids.filter((k) => k.status === 'done').length, total: kids.length }
       })
-  }, [tasks, activeTag])
+  }, [tasks, filters, today])
 
   // Keep keyboard focus on a card after it moves to another column.
   // Applied once per request, so later renders never pull focus away from where the user is typing.
@@ -81,6 +86,9 @@ export function BoardView({ tasks, dispatch, activeTag, onTagClick }: Props) {
       e.preventDefault()
       dispatch({ type: 'toggle-done', id: task.id })
       setFocusCard({ id: task.id })
+    } else if (e.altKey && e.code === 'KeyH') {
+      e.preventDefault()
+      dispatch({ type: 'toggle-today', id: task.id })
     } else if (e.key === 'Enter') {
       e.preventDefault()
       setEditing(task.id)
@@ -230,8 +238,10 @@ export function BoardView({ tasks, dispatch, activeTag, onTagClick }: Props) {
                       <p className="card-text">{task.text}</p>
                     )}
                   </div>
-                  {(task.tags.length > 0 || total > 0) && (
+                  {(task.tags.length > 0 || total > 0 || task.due || task.priority) && (
                     <div className="card-meta">
+                      {task.priority && <span className="prio" title="Prioridad">!</span>}
+                      {task.due && <DueLabel due={task.due} done={task.status === 'done'} />}
                       {total > 0 && (
                         <span className="card-progress" title={`${done} de ${total} subtareas hechas`}>
                           {done}/{total}
@@ -255,7 +265,7 @@ export function BoardView({ tasks, dispatch, activeTag, onTagClick }: Props) {
               ))}
             </div>
 
-            <AddCard status={status} label={label} tag={activeTag} dispatch={dispatch} />
+            <AddCard status={status} label={label} inherit={inheritFromFilters(filters, today)} dispatch={dispatch} />
           </section>
         )
       })}
@@ -314,7 +324,7 @@ function CardEditor({ task, dispatch, onDone }: { task: Task; dispatch: (a: Acti
 }
 
 /** Quick capture at the foot of each column: type, Enter, keep typing. */
-function AddCard({ status, label, tag, dispatch }: { status: Status; label: string; tag: string | null; dispatch: (a: Action) => void }) {
+function AddCard({ status, label, inherit, dispatch }: { status: Status; label: string; inherit: Inherit; dispatch: (a: Action) => void }) {
   const [text, setText] = useState('')
   return (
     <input
@@ -326,7 +336,7 @@ function AddCard({ status, label, tag, dispatch }: { status: Status; label: stri
       onKeyDown={(e) => {
         if (e.key === 'Enter' && text.trim()) {
           e.preventDefault()
-          dispatch({ type: 'create', text, status, tags: tag ? [tag] : [] })
+          dispatch({ type: 'create', text, status, inherit })
           setText('')
         } else if (e.key === 'Escape') {
           setText('')

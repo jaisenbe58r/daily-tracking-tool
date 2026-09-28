@@ -1,6 +1,7 @@
 import { memo, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import type { Action, Focus } from '../lib/store'
 import type { Group, Row } from '../lib/types'
+import { DueLabel } from './DueLabel'
 
 interface Props {
   row: Row
@@ -105,9 +106,21 @@ function TaskRowImpl({ row, focus, dragging, dispatch, onOpenActions, onDragStar
     } else if (e.key === '/' && collapsedSel && (caret === 0 || /\s/.test(el.value[caret - 1]))) {
       e.preventDefault()
       onOpenActions(task.id, el)
+    } else if (e.altKey && e.code === 'KeyH') {
+      e.preventDefault()
+      dispatch({ type: 'toggle-today', id: task.id })
     } else if (e.key === 'Escape') {
       el.blur()
     }
+  }
+
+  // Several lines pasted at once become several tasks, nested by their indentation.
+  const onPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const text = e.clipboardData.getData('text/plain')
+    if (!/\n\s*\S/.test(text.trim())) return
+    e.preventDefault()
+    dispatch({ type: 'commit', id: task.id })
+    dispatch({ type: 'paste', id: task.id, text, inherit })
   }
 
   // Arrow navigation walks the rendered rows, so it follows the visible tree.
@@ -187,18 +200,25 @@ function TaskRowImpl({ row, focus, dragging, dispatch, onOpenActions, onDragStar
 
       <div className="body">
         <div className="line">
+          {task.priority && (
+            <span className="prio" title="Prioridad">
+              !
+            </span>
+          )}
           <textarea
             ref={textRef}
             className="text"
             data-task-text={task.id}
             rows={1}
             value={task.text}
-            placeholder={depth === 0 ? 'Escribe una tarea…' : 'Subtarea…'}
+            placeholder={depth === 0 ? 'Escribe una tarea…   #tag   !   mañana' : 'Subtarea…'}
             spellCheck={false}
             onChange={(e) => dispatch({ type: 'edit', id: task.id, patch: { text: e.target.value } })}
             onKeyDown={onTextKey}
+            onPaste={onPaste}
             onBlur={() => dispatch({ type: 'commit', id: task.id })}
           />
+          {task.due && <DueLabel due={task.due} done={task.status === 'done'} />}
           {context && <span className="context" title={context}>{context}</span>}
           {task.tags.length > 0 && (
             <span className="tags">

@@ -5,7 +5,7 @@ import { organize } from './organize'
 
 const t = (id: string, parentId: string | null, extra: Partial<Task> = {}): Task => ({ ...newTask(parentId, id), id, ...extra })
 const ids = (rows: { task: Task }[]) => rows.map((r) => r.task.id)
-const none = { tag: null, hideDone: false }
+const none = { tag: null, hideDone: false, today: false }
 
 const tasks = [
   t('zimvie', null, { tags: ['zimvie'], createdAt: 1_000 }),
@@ -23,14 +23,14 @@ describe('organize', () => {
 
   it('filters keep ancestors as dimmed context and open collapsed parents', () => {
     const collapsed = update(tasks, 'zimvie', { collapsed: true })
-    const [g] = organize(collapsed, 'manual', { tag: 'it', hideDone: false })
+    const [g] = organize(collapsed, 'manual', { tag: 'it', hideDone: false, today: false })
     expect(ids(g.rows)).toEqual(['zimvie', 'torno', 'it'])
     expect(g.rows.map((r) => !!r.dimmed)).toEqual([true, true, false])
     expect(g.inherit).toEqual({ tags: ['it'] })
   })
 
   it('hides done tasks', () => {
-    const [g] = organize(tasks, 'manual', { tag: null, hideDone: true })
+    const [g] = organize(tasks, 'manual', { tag: null, hideDone: true, today: false })
     expect(ids(g.rows)).not.toContain('alarmas')
   })
 
@@ -43,6 +43,20 @@ describe('organize', () => {
     ])
     expect(groups[1].rows[1].context).toBe('zimvie › torno')
     expect(groups[0].inherit).toEqual({ status: 'doing' })
+  })
+
+  it('today shows what is due or overdue, and what got done today', () => {
+    const now = new Date(2026, 8, 28, 12).getTime()
+    const list = [
+      t('due', null, { due: '2026-09-28' }),
+      t('late', null, { due: '2026-09-20' }),
+      t('later', null, { due: '2026-10-01' }),
+      t('doneNow', null, { status: 'done', completedAt: now }),
+      t('doneBefore', null, { status: 'done', completedAt: now - 3 * 86_400_000, due: '2026-09-25' }),
+    ]
+    const [g] = organize(list, 'manual', { tag: null, hideDone: false, today: true }, now)
+    expect(ids(g.rows)).toEqual(['due', 'late', 'doneNow'])
+    expect(g.inherit).toEqual({ due: '2026-09-28' })
   })
 
   it('groups by tag, untagged last', () => {

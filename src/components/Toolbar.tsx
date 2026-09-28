@@ -33,6 +33,13 @@ export function Toolbar({ view, sort, filters, tags, onSort, onFilters }: Props)
       )}
 
       <div className="tool">
+        <button
+          aria-pressed={filters.today}
+          title="Solo lo planificado para hoy o vencido (Alt+T)"
+          onClick={() => onFilters({ ...filters, today: !filters.today })}
+        >
+          Hoy
+        </button>
         {view === 'list' && (
           <button aria-pressed={filters.hideDone} onClick={() => onFilters({ ...filters, hideDone: !filters.hideDone })}>
             Ocultar hechas

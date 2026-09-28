@@ -1,9 +1,11 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { Action } from '../lib/store'
 import type { Task } from '../lib/types'
+import { useToday } from '../lib/today'
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
 const M = isMac ? '⌘' : 'Ctrl '
+const A = isMac ? '⌥' : 'Alt '
 
 interface Item {
   label: string
@@ -17,14 +19,17 @@ interface Props {
   hasChildren: boolean
   anchor: DOMRect
   dispatch: (action: Action) => void
+  onExport: () => void
+  onImport: () => void
   onClose: (refocus: boolean) => void
 }
 
-export function QuickActions({ task, hasChildren, anchor, dispatch, onClose }: Props) {
+export function QuickActions({ task, hasChildren, anchor, dispatch, onExport, onImport, onClose }: Props) {
   const [query, setQuery] = useState('')
   const [active, setActive] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
   const id = task.id
+  const today = useToday()
 
   const items = useMemo<Item[]>(() => {
     const focusText = (caret: 'end' | 'start' = 'end') => dispatch({ type: 'focus', id, caret })
@@ -39,6 +44,18 @@ export function QuickActions({ task, hasChildren, anchor, dispatch, onClose }: P
         label: task.status === 'doing' ? 'Quitar de en curso' : 'En curso',
         keywords: 'doing progreso empezar',
         run: () => { dispatch({ type: 'set-status', id, status: task.status === 'doing' ? 'todo' : 'doing' }); focusText() },
+      },
+      {
+        label: task.due === today ? 'Quitar de hoy' : 'Para hoy',
+        hint: `${A}H`,
+        keywords: 'hoy fecha today planificar',
+        run: () => { dispatch({ type: 'toggle-today', id }); focusText() },
+      },
+      {
+        label: task.priority ? 'Quitar prioridad' : 'Prioridad',
+        hint: '!',
+        keywords: 'importante urgente prioridad',
+        run: () => { dispatch({ type: 'toggle-priority', id }); focusText() },
       },
       {
         label: 'Nota',
@@ -71,8 +88,12 @@ export function QuickActions({ task, hasChildren, anchor, dispatch, onClose }: P
       })
     }
     list.push({ label: 'Eliminar', keywords: 'borrar delete', run: () => dispatch({ type: 'remove', id }) })
+    list.push(
+      { label: 'Exportar copia', hint: `${M}S`, keywords: 'backup json guardar descargar', run: onExport },
+      { label: 'Importar copia', hint: `${M}O`, keywords: 'backup json abrir cargar restaurar', run: onImport },
+    )
     return list
-  }, [dispatch, id, task.status, task.text, task.collapsed, hasChildren])
+  }, [dispatch, id, task.status, task.text, task.collapsed, task.due, task.priority, today, hasChildren, onExport, onImport])
 
   const q = query.trim().toLowerCase()
   const filtered = q ? items.filter((i) => `${i.label} ${i.keywords ?? ''}`.toLowerCase().includes(q)) : items

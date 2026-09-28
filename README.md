@@ -15,6 +15,22 @@ npm run build
 
 Los datos se guardan solos en `localStorage` del navegador (clave `daily-tracking-tool:v1`) y se sincronizan entre pestañas abiertas. Al cargar se validan y se reparan (campos que faltan, tareas huérfanas o ciclos), así que un dato corrupto nunca deja la hoja inservible.
 
+## Escribir rápido
+
+Al pulsar Enter (o salir de la línea), el texto se interpreta:
+
+- `#tag` en cualquier sitio añade el tag.
+- `!` como palabra suelta marca la tarea como prioritaria.
+- Una fecha al final de la línea la planifica: `hoy`, `mañana`, `pasado mañana`, un día de la semana (`viernes`) o `3/10`. En mitad de la frase, con `@` (`Revisar @lunes la oferta`). Sin `@`, solo se lee al final, así que «Informe de mañana para Ana» se queda como está.
+
+`Llamar a IT mañana #zimvie !` → «Llamar a IT», para mañana, con `#zimvie` y prioridad.
+
+**Pegar una lista** (varias líneas) crea una tarea por línea. La sangría, las viñetas `-` `*` `1.`, los `├─ │ └─` y las casillas `[ ]` `[x]` `☐` `☑` se respetan: pegar un árbol crea el árbol.
+
+**Hoy** (`Alt+T`, o «Hoy» encima de la lista) muestra solo lo planificado para hoy o vencido, más lo que has cerrado hoy. `Alt+H` planifica o desplanifica la tarea actual para hoy.
+
+**Copia de seguridad**: `Cmd/Ctrl+S` descarga todo en JSON; `Cmd/Ctrl+O` (o soltar el archivo sobre la página) lo restaura. Importar reemplaza la hoja y se puede deshacer.
+
 ## Teclado
 
 | Tecla | Acción |
@@ -30,6 +46,9 @@ Los datos se guardan solos en `localStorage` del navegador (clave `daily-trackin
 | `Cmd/Ctrl+.` | Colapsar / expandir hijos |
 | `Backspace` en una tarea vacía | Borrarla |
 | `Cmd/Ctrl+Z` · `Cmd/Ctrl+Shift+Z` | Deshacer · rehacer (texto y estructura) |
+| `Alt+H` | Planificar para hoy (o quitarlo) |
+| `Alt+T` | Vista Hoy |
+| `Cmd/Ctrl+S` · `Cmd/Ctrl+O` | Exportar · importar copia JSON |
 
 En el **Board** (`Alt+2`, o `Alt+1` para volver a la lista):
 
@@ -59,6 +78,8 @@ La vista, el orden y los filtros se recuerdan en cada navegador.
 - `src/lib/tree.ts`: operaciones puras sobre el árbol. Las tareas viven en un array plano con `parentId`; el orden manual es el orden relativo en el array.
 - `src/lib/store.ts`: reducer, foco e historial de deshacer.
 - `src/lib/persist.ts`: guardado en `localStorage` y validación de lo guardado.
+- `src/lib/parse.ts`: la gramática de captura (`#tag`, `!`, fechas) y el pegado de listas.
+- `src/lib/backup.ts`: exportar e importar JSON.
 - `src/lib/organize.ts`: ordenar, agrupar y filtrar (puro, con tests).
 - `src/lib/prefs.ts`: vista, orden y filtros recordados por navegador.
 - `src/components/`: `ListView` y `TaskRow` (folio), `BoardView` (kanban), `Toolbar` y el menú `/`.

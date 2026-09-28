@@ -11,6 +11,8 @@ export function newTask(parentId: string | null = null, text = ''): Task {
     collapsed: false,
     createdAt: Date.now(),
     completedAt: null,
+    due: null,
+    priority: false,
   }
 }
 
@@ -153,16 +155,4 @@ export function moveTo(tasks: Task[], id: string, parentId: string | null, befor
   if (!task || beforeId === id) return tasks
   if (parentId === id || (parentId && descendantIds(tasks, id).has(parentId))) return tasks
   return place(tasks, task, parentId, beforeId)
-}
-
-const TAG_RE = /(^|\s)#([\p{L}\p{N}_-]+)/gu
-
-/** Pulls `#tags` out of the text so typing "Demo #captia" tags the task. */
-export function extractTags(text: string): { text: string; tags: string[] } {
-  const tags: string[] = []
-  const clean = text.replace(TAG_RE, (_, lead: string, tag: string) => {
-    tags.push(tag.toLowerCase())
-    return lead
-  })
-  return { text: clean.replace(/\s{2,}/g, ' ').trim(), tags }
 }

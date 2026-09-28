@@ -51,9 +51,4 @@ describe('tree', () => {
     const t = tree.update(make(['a', null], ['a1', 'a']), 'a', { collapsed: true })
     expect(shape(t)).toEqual(['a'])
   })
-
-  it('extracts #tags from text', () => {
-    expect(tree.extractTags('Preparar demo #Captia #urgente')).toEqual({ text: 'Preparar demo', tags: ['captia', 'urgente'] })
-    expect(tree.extractTags('C#  sin tag')).toEqual({ text: 'C# sin tag', tags: [] })
-  })
 })

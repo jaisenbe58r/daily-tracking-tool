@@ -26,9 +26,11 @@ interface Props {
   grouped: boolean
   activeTag: string | null
   onTagClick: (tag: string) => void
+  onExport: () => void
+  onImport: () => void
 }
 
-export function ListView({ state, dispatch, groups, structural, grouped, activeTag, onTagClick }: Props) {
+export function ListView({ state, dispatch, groups, structural, grouped, activeTag, onTagClick, onExport, onImport }: Props) {
   const listRef = useRef<HTMLDivElement>(null)
   const [actionsFor, setActionsFor] = useState<{ id: string; anchor: DOMRect } | null>(null)
   const [drag, setDrag] = useState<Drag | null>(null)
@@ -158,6 +160,8 @@ export function ListView({ state, dispatch, groups, structural, grouped, activeT
           hasChildren={actionsRow.hasChildren}
           anchor={actionsFor.anchor}
           dispatch={dispatch}
+          onExport={onExport}
+          onImport={onImport}
           onClose={(refocus) => {
             setActionsFor(null)
             if (refocus) dispatch({ type: 'focus', id: actionsFor.id })

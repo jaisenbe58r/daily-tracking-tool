@@ -1,7 +1,8 @@
 import { useEffect, useReducer } from 'react'
-import type { Status, Task } from './types'
+import type { Inherit, Status, Task } from './types'
 import * as tree from './tree'
 import { STORAGE_KEY, load, parse, save } from './persist'
+import { dateKey, parseOutline, parseTask } from './parse'
 
 export type Caret = number | 'start' | 'end'
 
@@ -31,10 +32,16 @@ export type Action =
   | { type: 'edit'; id: string; patch: Partial<Pick<Task, 'text' | 'notes' | 'tags'>> }
   | { type: 'commit'; id: string }
   /** `inherit` comes from the group the row sits in; `flat` keeps the new task a sibling (grouped views). */
-  | { type: 'add-after'; id: string; inherit?: Partial<Pick<Task, 'status' | 'tags'>>; flat?: boolean }
-  | { type: 'create'; text: string; status: Status; tags?: string[] }
+  | { type: 'add-after'; id: string; inherit?: Inherit; flat?: boolean }
+  | { type: 'create'; text: string; status: Status; inherit?: Inherit }
+  /** Multi-line paste: one task per line, indentation as nesting, starting at `id`. */
+  | { type: 'paste'; id: string; text: string; inherit?: Inherit }
+  | { type: 'toggle-today'; id: string }
+  | { type: 'toggle-priority'; id: string }
+  /** Replaces everything (JSON import), as one undoable step. */
+  | { type: 'import'; tasks: Task[] }
   | { type: 'add-child'; id: string }
-  | { type: 'add-end'; inherit?: Partial<Pick<Task, 'status' | 'tags'>> }
+  | { type: 'add-end'; inherit?: Inherit }
   | { type: 'indent'; id: string; caret?: Caret }
   | { type: 'outdent'; id: string; caret?: Caret }
   | { type: 'move-up'; id: string; caret?: Caret }
@@ -61,6 +68,19 @@ function withStatus(task: Task, status: Status): Partial<Task> {
   return { status, completedAt: status === 'done' ? (task.completedAt ?? Date.now()) : null }
 }
 
+/** Applies the quick-capture grammar (#tag, !, dates) to a task's text. */
+function captured(task: Task): Task {
+  const parsed = parseTask(task.text)
+  if (parsed.text === task.text && !parsed.tags.length && !parsed.priority && !parsed.due) return task
+  return {
+    ...task,
+    text: parsed.text,
+    tags: [...new Set([...task.tags, ...parsed.tags])],
+    priority: task.priority || parsed.priority,
+    due: parsed.due ?? task.due,
+  }
+}
+
 function reducer(state: State, action: Exclude<Action, { type: 'undo' | 'redo' }>): State {
   const { tasks } = state
   const find = (id: string) => tasks.find((t) => t.id === id)
@@ -72,10 +92,8 @@ function reducer(state: State, action: Exclude<Action, { type: 'undo' | 'redo' }
     case 'commit': {
       const task = find(action.id)
       if (!task) return state
-      const { text, tags } = tree.extractTags(task.text)
-      if (!tags.length && text === task.text) return state
-      const merged = [...new Set([...task.tags, ...tags])]
-      return { ...state, tasks: tree.update(tasks, task.id, { text, tags: merged }) }
+      const next = captured(task)
+      return next === task ? state : { ...state, tasks: tasks.map((t) => (t === task ? next : t)) }
     }
 
     case 'add-after': {
@@ -90,11 +108,47 @@ function reducer(state: State, action: Exclude<Action, { type: 'undo' | 'redo' }
     }
 
     case 'create': {
-      const created = { ...tree.newTask(null, action.text.trim()), tags: action.tags ?? [] }
-      const { text, tags } = tree.extractTags(created.text)
-      const task = { ...created, text, tags: [...new Set([...created.tags, ...tags])], ...withStatus(created, action.status) }
-      return { ...state, tasks: [...tasks, task] }
+      const created = captured({ ...tree.newTask(null, action.text.trim()), ...action.inherit })
+      return { ...state, tasks: [...tasks, { ...created, ...withStatus(created, action.status) }] }
     }
+
+    case 'paste': {
+      const anchor = find(action.id)
+      const items = parseOutline(action.text)
+      if (!anchor || !items.length) return state
+      let out = tasks
+      // Top-level lines go right after the anchor, in order; deeper lines under the line above them.
+      const before = tree.nextSibling(tasks, anchor.id)?.id ?? null
+      const parents: string[] = []
+      let last = anchor.id
+      items.forEach((item, i) => {
+        const fill = i === 0 && !anchor.text.trim()
+        const base = fill ? anchor : { ...tree.newTask(), ...action.inherit }
+        const depth = Math.min(item.depth, parents.length)
+        const parentId = depth === 0 ? anchor.parentId : parents[depth - 1]
+        let task = captured({ ...base, text: item.text, parentId })
+        if (item.done) task = { ...task, ...withStatus(task, 'done') }
+        out = fill ? out.map((t) => (t.id === anchor.id ? task : t)) : tree.place(out, task, parentId, depth === 0 ? before : null)
+        parents.length = depth
+        parents.push(task.id)
+        last = task.id
+      })
+      return { tasks: out, focus: focusOn(last) }
+    }
+
+    case 'toggle-today': {
+      const task = find(action.id)
+      const today = dateKey(new Date())
+      return task ? { ...state, tasks: tree.update(tasks, task.id, { due: task.due === today ? null : today }) } : state
+    }
+
+    case 'toggle-priority': {
+      const task = find(action.id)
+      return task ? { ...state, tasks: tree.update(tasks, task.id, { priority: !task.priority }) } : state
+    }
+
+    case 'import':
+      return { tasks: action.tasks.length ? action.tasks : [tree.newTask()], focus: null }
 
     case 'add-child': {
       const created = tree.newTask(action.id)

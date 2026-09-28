@@ -30,6 +30,8 @@ export function sanitize(input: unknown): Task[] {
       collapsed: r.collapsed === true,
       createdAt: typeof r.createdAt === 'number' ? r.createdAt : Date.now(),
       completedAt: status === 'done' && typeof r.completedAt === 'number' ? r.completedAt : null,
+      due: typeof r.due === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.due) ? r.due : null,
+      priority: r.priority === true,
     })
   }
   const byId = new Map(tasks.map((t) => [t.id, t]))

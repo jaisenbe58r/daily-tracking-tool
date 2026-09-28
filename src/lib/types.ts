@@ -15,6 +15,9 @@ export interface Task {
   collapsed: boolean
   createdAt: number
   completedAt: number | null
+  /** Local date (YYYY-MM-DD) the task is planned for; drives the Today view. */
+  due: string | null
+  priority: boolean
 }
 
 export interface Row {
@@ -34,12 +37,17 @@ export type SortMode = 'manual' | 'date' | 'status' | 'tag'
 export interface Filters {
   tag: string | null
   hideDone: boolean
+  /** Only what's planned for today or overdue, plus what got done today. */
+  today: boolean
 }
 
 export interface Group {
   key: string
   label: string
   /** What a task created inside this group inherits. */
-  inherit: Partial<Pick<Task, 'status' | 'tags'>>
+  inherit: Inherit
   rows: Row[]
 }
+
+/** Attributes a new task takes from where it was created (a group, an active filter). */
+export type Inherit = Partial<Pick<Task, 'status' | 'tags' | 'due'>>

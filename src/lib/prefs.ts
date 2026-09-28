@@ -10,7 +10,7 @@ export interface Prefs {
 }
 
 const KEY = 'daily-tracking-tool:prefs'
-const DEFAULTS: Prefs = { view: 'list', sort: 'manual', filters: { tag: null, hideDone: false } }
+const DEFAULTS: Prefs = { view: 'list', sort: 'manual', filters: { tag: null, hideDone: false, today: false } }
 
 function load(): Prefs {
   try {
@@ -21,6 +21,7 @@ function load(): Prefs {
       filters: {
         tag: typeof raw.filters?.tag === 'string' ? raw.filters.tag : null,
         hideDone: raw.filters?.hideDone === true,
+        today: raw.filters?.today === true,
       },
     }
   } catch {
