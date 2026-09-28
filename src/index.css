@@ -644,6 +644,41 @@ textarea::placeholder { color: color-mix(in srgb, var(--grey) 60%, var(--paper))
 }
 .capture-input::placeholder { color: color-mix(in srgb, var(--grey) 60%, var(--paper)); }
 
+.capture-keys { display: flex; align-items: center; gap: 6px; }
+.capture-ai { font-family: var(--mono); font-size: 11px; letter-spacing: 0.15em; color: var(--grey); }
+
+/* AI answer: a preview under the capture line, applied with Enter. */
+.capture-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: -1px;
+  right: -1px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 50vh;
+  padding: 14px 16px 12px;
+  overflow-y: auto;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px -12px color-mix(in srgb, var(--ink) 25%, transparent);
+  animation: qa-in 140ms var(--ease);
+}
+.ai-summary { font-size: 14px; }
+.ai-thinking { font-family: var(--mono); font-size: 12px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--grey); }
+.ai-thinking::after { content: '…'; display: inline-block; width: 1.5em; animation: ai-dots 1.2s steps(4) infinite; overflow: hidden; vertical-align: bottom; }
+@keyframes ai-dots { from { width: 0; } to { width: 1.5em; } }
+.ai-changes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.ai-change { display: flex; align-items: baseline; gap: 10px; min-width: 0; font-size: 14px; line-height: 24px; }
+.ai-mark { flex: 0 0 16px; font-family: var(--mono); font-size: 12px; text-align: center; color: var(--grey); }
+.ai-change[data-kind='done'] .ai-mark { background: var(--green); color: var(--ink); border-radius: 3px; line-height: 16px; }
+.ai-change[data-kind='remove'] .ai-text { text-decoration: line-through; color: var(--grey); }
+.ai-text { min-width: 0; overflow-wrap: anywhere; }
+.ai-detail { flex-shrink: 0; margin-left: auto; font-family: var(--mono); font-size: 12px; color: var(--grey); }
+.capture-foot { display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11px; color: var(--grey); }
+@media (prefers-reduced-motion: reduce) { .ai-thinking::after { animation: none; width: 1.5em; } }
+
 /* ── Toast ───────────────────────────────────────────── */
 
 .toast {
