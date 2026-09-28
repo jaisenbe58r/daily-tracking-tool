@@ -1,6 +1,6 @@
 import { memo, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import type { Action, Focus } from '../lib/store'
-import type { Row } from '../lib/types'
+import type { Group, Row } from '../lib/types'
 
 interface Props {
   row: Row
@@ -9,6 +9,12 @@ interface Props {
   dispatch: (action: Action) => void
   onOpenActions: (id: string, anchor: HTMLElement) => void
   onDragStart: (id: string, e: PointerEvent) => void
+  /** False in grouped views, where the tree can't be edited (no Tab, no dragging). */
+  structural: boolean
+  /** Attributes a task created from this row inherits (its group, the active tag filter). */
+  inherit: Group['inherit']
+  activeTag: string | null
+  onTagClick: (tag: string) => void
 }
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
@@ -27,8 +33,8 @@ function isSingleLine(el: HTMLTextAreaElement) {
   return el.scrollHeight <= parseFloat(getComputedStyle(el).lineHeight) * 1.5
 }
 
-function TaskRowImpl({ row, focus, dragging, dispatch, onOpenActions, onDragStart }: Props) {
-  const { task, depth, hasChildren, lastPath } = row
+function TaskRowImpl({ row, focus, dragging, dispatch, onOpenActions, onDragStart, structural, inherit, activeTag, onTagClick }: Props) {
+  const { task, depth, hasChildren, lastPath, context, dimmed } = row
   const textRef = useRef<HTMLTextAreaElement>(null)
   const notesRef = useRef<HTMLTextAreaElement>(null)
   const [notesOpen, setNotesOpen] = useState(false)
@@ -72,18 +78,18 @@ function TaskRowImpl({ row, focus, dragging, dispatch, onOpenActions, onDragStar
       dispatch({ type: 'focus', id: task.id, target: 'notes' })
     } else if (e.key === 'Enter') {
       e.preventDefault()
-      if (!task.text.trim() && depth > 0) {
+      if (structural && !task.text.trim() && depth > 0) {
         dispatch({ type: 'outdent', id: task.id })
       } else {
         dispatch({ type: 'commit', id: task.id })
-        dispatch({ type: 'add-after', id: task.id })
+        dispatch({ type: 'add-after', id: task.id, inherit, flat: !structural })
       }
     } else if (e.key === 'Tab') {
       e.preventDefault()
-      dispatch({ type: e.shiftKey ? 'outdent' : 'indent', id: task.id, caret })
+      if (structural) dispatch({ type: e.shiftKey ? 'outdent' : 'indent', id: task.id, caret })
     } else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && (e.altKey || mod(e)) && e.shiftKey) {
       e.preventDefault()
-      dispatch({ type: e.key === 'ArrowUp' ? 'move-up' : 'move-down', id: task.id, caret })
+      if (structural) dispatch({ type: e.key === 'ArrowUp' ? 'move-up' : 'move-down', id: task.id, caret })
     } else if (e.key === '.' && mod(e)) {
       e.preventDefault()
       dispatch({ type: 'toggle-collapse', id: task.id })
@@ -127,18 +133,21 @@ function TaskRowImpl({ row, focus, dragging, dispatch, onOpenActions, onDragStar
       data-row-id={task.id}
       data-status={task.status}
       data-dragging={dragging || undefined}
+      data-dimmed={dimmed || undefined}
       style={{ '--depth': depth } as React.CSSProperties}
     >
-      <button
-        className="handle"
-        aria-label="Arrastrar para reordenar"
-        tabIndex={-1}
-        onPointerDown={(e) => onDragStart(task.id, e)}
-      >
-        <svg width="8" height="14" viewBox="0 0 8 14" aria-hidden>
-          {[2, 7, 12].flatMap((y) => [<circle key={`a${y}`} cx="2" cy={y} r="1" />, <circle key={`b${y}`} cx="6" cy={y} r="1" />])}
-        </svg>
-      </button>
+      {structural && (
+        <button
+          className="handle"
+          aria-label="Arrastrar para reordenar"
+          tabIndex={-1}
+          onPointerDown={(e) => onDragStart(task.id, e)}
+        >
+          <svg width="8" height="14" viewBox="0 0 8 14" aria-hidden>
+            {[2, 7, 12].flatMap((y) => [<circle key={`a${y}`} cx="2" cy={y} r="1" />, <circle key={`b${y}`} cx="6" cy={y} r="1" />])}
+          </svg>
+        </button>
+      )}
 
       {lastPath.map((last, i) => (
         <span
@@ -190,18 +199,24 @@ function TaskRowImpl({ row, focus, dragging, dispatch, onOpenActions, onDragStar
             onKeyDown={onTextKey}
             onBlur={() => dispatch({ type: 'commit', id: task.id })}
           />
+          {context && <span className="context" title={context}>{context}</span>}
           {task.tags.length > 0 && (
             <span className="tags">
               {task.tags.map((tag) => (
-                <button
-                  key={tag}
-                  className="tag"
-                  tabIndex={-1}
-                  title="Quitar tag"
-                  onClick={() => dispatch({ type: 'edit', id: task.id, patch: { tags: task.tags.filter((t) => t !== tag) } })}
-                >
-                  #{tag}
-                </button>
+                <span key={tag} className="tag" data-active={tag === activeTag || undefined}>
+                  <button tabIndex={-1} title={tag === activeTag ? 'Quitar filtro' : `Filtrar por #${tag}`} onClick={() => onTagClick(tag)}>
+                    #{tag}
+                  </button>
+                  <button
+                    className="tag-remove"
+                    tabIndex={-1}
+                    aria-label={`Quitar #${tag} de la tarea`}
+                    title="Quitar tag"
+                    onClick={() => dispatch({ type: 'edit', id: task.id, patch: { tags: task.tags.filter((t) => t !== tag) } })}
+                  >
+                    ×
+                  </button>
+                </span>
               ))}
             </span>
           )}

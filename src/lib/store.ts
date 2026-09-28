@@ -30,9 +30,11 @@ export type AppState = State & History
 export type Action =
   | { type: 'edit'; id: string; patch: Partial<Pick<Task, 'text' | 'notes' | 'tags'>> }
   | { type: 'commit'; id: string }
-  | { type: 'add-after'; id: string }
+  /** `inherit` comes from the group the row sits in; `flat` keeps the new task a sibling (grouped views). */
+  | { type: 'add-after'; id: string; inherit?: Partial<Pick<Task, 'status' | 'tags'>>; flat?: boolean }
+  | { type: 'create'; text: string; status: Status; tags?: string[] }
   | { type: 'add-child'; id: string }
-  | { type: 'add-end' }
+  | { type: 'add-end'; inherit?: Partial<Pick<Task, 'status' | 'tags'>> }
   | { type: 'indent'; id: string; caret?: Caret }
   | { type: 'outdent'; id: string; caret?: Caret }
   | { type: 'move-up'; id: string; caret?: Caret }
@@ -77,8 +79,21 @@ function reducer(state: State, action: Exclude<Action, { type: 'undo' | 'redo' }
     }
 
     case 'add-after': {
-      const created = tree.newTask()
+      const target = find(action.id)
+      const created = { ...tree.newTask(), ...action.inherit }
+      if (action.flat && target) {
+        created.parentId = target.parentId
+        const next = tree.nextSibling(tasks, target.id)
+        return { tasks: tree.place(tasks, created, target.parentId, next?.id ?? null), focus: focusOn(created.id) }
+      }
       return { tasks: tree.insertAfter(tasks, action.id, created), focus: focusOn(created.id) }
+    }
+
+    case 'create': {
+      const created = { ...tree.newTask(null, action.text.trim()), tags: action.tags ?? [] }
+      const { text, tags } = tree.extractTags(created.text)
+      const task = { ...created, text, tags: [...new Set([...created.tags, ...tags])], ...withStatus(created, action.status) }
+      return { ...state, tasks: [...tasks, task] }
     }
 
     case 'add-child': {
@@ -89,7 +104,7 @@ function reducer(state: State, action: Exclude<Action, { type: 'undo' | 'redo' }
     }
 
     case 'add-end': {
-      const created = tree.newTask()
+      const created = { ...tree.newTask(), ...action.inherit }
       return { tasks: [...tasks, created], focus: focusOn(created.id) }
     }
 

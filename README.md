@@ -31,15 +31,38 @@ Los datos se guardan solos en `localStorage` del navegador (clave `daily-trackin
 | `Backspace` en una tarea vacía | Borrarla |
 | `Cmd/Ctrl+Z` · `Cmd/Ctrl+Shift+Z` | Deshacer · rehacer (texto y estructura) |
 
+En el **Board** (`Alt+2`, o `Alt+1` para volver a la lista):
+
+| Tecla | Acción |
+|---|---|
+| `←` / `→` | Mover la tarjeta a la columna anterior / siguiente |
+| `↑` / `↓` | Moverse entre tarjetas |
+| `Enter` | Editar el texto |
+| `Cmd/Ctrl+Enter` | Completar o reabrir |
+| `Cmd/Ctrl+Backspace` | Borrar (se puede deshacer) |
+
 Con el ratón: el asa `⋮⋮` a la izquierda arrastra la tarea con sus hijos; desplazar en horizontal mientras arrastras cambia el nivel.
+
+En el Board, las tarjetas se arrastran entre **To do → Doing → Done**; en móvil, mantén pulsado un momento antes de arrastrar. Cada columna tiene su propio `+ Añadir` para capturar sin salir del tablero.
+
+## Organizar
+
+Encima de la lista, en pequeño:
+
+- **Orden**: `Manual` es el árbol editable. `Fecha`, `Estado` y `Tag` agrupan las tareas en planos, cada una con su ruta de padres. Una tarea nueva creada dentro de un grupo hereda su estado o su tag.
+- **Ocultar hechas** y **filtro por tag** (también al pulsar un tag de cualquier tarea). Al filtrar, los padres de lo que coincide se quedan atenuados como contexto.
+
+La vista, el orden y los filtros se recuerdan en cada navegador.
 
 ## Arquitectura
 
 - `src/lib/tree.ts`: operaciones puras sobre el árbol. Las tareas viven en un array plano con `parentId`; el orden manual es el orden relativo en el array.
 - `src/lib/store.ts`: reducer, foco e historial de deshacer.
 - `src/lib/persist.ts`: guardado en `localStorage` y validación de lo guardado.
-- `src/components/`: la fila de tarea y el menú `/`.
+- `src/lib/organize.ts`: ordenar, agrupar y filtrar (puro, con tests).
+- `src/lib/prefs.ts`: vista, orden y filtros recordados por navegador.
+- `src/components/`: `ListView` y `TaskRow` (folio), `BoardView` (kanban), `Toolbar` y el menú `/`.
 
-Cada tarea guarda `status` (`todo` · `doing` · `done`), `tags` y `createdAt`, listos para la vista Board y para ordenar y agrupar.
+Cada tarea guarda `status` (`todo` · `doing` · `done`), `tags` y `createdAt`: la lista y el Board son dos vistas de los mismos datos.
 
 Estética según el sistema de Captia (`captia-technology/captia-design`): papel, tinta, gris y filete; el verde de marca solo como relleno con negro encima; Geist y Geist Mono.

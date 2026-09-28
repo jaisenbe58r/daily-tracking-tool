@@ -23,4 +23,23 @@ export interface Row {
   hasChildren: boolean
   /** For each level from 1..depth: is the ancestor (or the task itself, last entry) the last of its siblings? */
   lastPath: boolean[]
+  /** Parent path shown when the row is out of its tree (grouped views, board). */
+  context?: string
+  /** Shown only because a descendant matches the filter. */
+  dimmed?: boolean
+}
+
+export type SortMode = 'manual' | 'date' | 'status' | 'tag'
+
+export interface Filters {
+  tag: string | null
+  hideDone: boolean
+}
+
+export interface Group {
+  key: string
+  label: string
+  /** What a task created inside this group inherits. */
+  inherit: Partial<Pick<Task, 'status' | 'tags'>>
+  rows: Row[]
 }
