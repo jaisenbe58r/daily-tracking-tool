@@ -29,6 +29,21 @@ export default function App() {
   const [drag, setDrag] = useState<Drag | null>(null)
   const [today, setToday] = useState(() => new Date())
 
+  // Undo/redo covers typing and structure alike, so the browser's own
+  // per-field undo is replaced by the app's history.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(isMac ? e.metaKey : e.ctrlKey) || (e.target as HTMLElement | null)?.closest?.('.qa')) return
+      const key = e.key.toLowerCase()
+      const redo = (key === 'z' && e.shiftKey) || (!isMac && key === 'y')
+      if (key !== 'z' && !redo) return
+      e.preventDefault()
+      dispatch({ type: redo ? 'redo' : 'undo' })
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [dispatch])
+
   // Keep the heading right when the tab stays open past midnight.
   useEffect(() => {
     const timer = setInterval(() => setToday(new Date()), 60_000)

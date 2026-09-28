@@ -1,6 +1,7 @@
 import { useEffect, useReducer } from 'react'
 import type { Status, Task } from './types'
 import * as tree from './tree'
+import { STORAGE_KEY, load, parse, save } from './persist'
 
 export type Caret = number | 'start' | 'end'
 
@@ -16,6 +17,15 @@ export interface State {
   tasks: Task[]
   focus: Focus | null
 }
+
+interface History {
+  past: Task[][]
+  future: Task[][]
+  /** `id:field` of the last text edit, so a burst of typing is one undo step. */
+  typing: string | null
+}
+
+export type AppState = State & History
 
 export type Action =
   | { type: 'edit'; id: string; patch: Partial<Pick<Task, 'text' | 'notes' | 'tags'>> }
@@ -34,8 +44,8 @@ export type Action =
   | { type: 'remove'; id: string; focusPrev?: boolean }
   | { type: 'focus'; id: string; target?: Focus['target']; caret?: Caret }
   | { type: 'replace'; tasks: Task[] }
-
-const STORAGE_KEY = 'daily-tracking-tool:v1'
+  | { type: 'undo' }
+  | { type: 'redo' }
 
 let seq = 0
 const focusOn = (id: string, caret: Caret = 'end', target: Focus['target'] = 'text'): Focus => ({
@@ -49,7 +59,7 @@ function withStatus(task: Task, status: Status): Partial<Task> {
   return { status, completedAt: status === 'done' ? (task.completedAt ?? Date.now()) : null }
 }
 
-function reducer(state: State, action: Action): State {
+function reducer(state: State, action: Exclude<Action, { type: 'undo' | 'redo' }>): State {
   const { tasks } = state
   const find = (id: string) => tasks.find((t) => t.id === id)
 
@@ -136,40 +146,87 @@ function keepFocus(state: State, id: string, caret: Caret = 'end'): Focus {
   return focusOn(id, caret, state.focus?.id === id ? state.focus.target : 'text')
 }
 
-function load(): Task[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    const tasks = raw ? (JSON.parse(raw).tasks as Task[]) : []
-    if (Array.isArray(tasks) && tasks.length) return tasks
-  } catch {
-    // Corrupt or unavailable storage: start with a blank sheet.
+const HISTORY_LIMIT = 200
+
+/** Wraps the reducer with undo/redo over the task list. Focus is not part of history. */
+function withHistory(state: AppState, action: Action): AppState {
+  if (action.type === 'undo' || action.type === 'redo') {
+    const [from, to] = action.type === 'undo' ? (['past', 'future'] as const) : (['future', 'past'] as const)
+    const snapshot = state[from].at(-1)
+    if (!snapshot) return state
+    return {
+      ...state,
+      tasks: snapshot,
+      [from]: state[from].slice(0, -1),
+      [to]: [...state[to], state.tasks],
+      typing: null,
+      focus: restoreFocus(state, snapshot),
+    }
   }
-  return [tree.newTask()]
+  const next = reducer(state, action)
+  if (action.type === 'replace') return { ...next, past: [], future: [], typing: null }
+  if (next.tasks === state.tasks) return { ...state, ...next, typing: action.type === 'focus' ? null : state.typing }
+
+  const typing = action.type === 'edit' ? `${action.id}:${Object.keys(action.patch).join()}` : null
+  const coalesce = typing !== null && typing === state.typing
+  return {
+    ...next,
+    past: coalesce ? state.past : [...state.past, state.tasks].slice(-HISTORY_LIMIT),
+    future: [],
+    typing,
+  }
 }
 
-function init(): State {
+/**
+ * After undo/redo put the caret on what the user will look for: a task that
+ * came back, else the task that was focused, else the nearest survivor.
+ */
+function restoreFocus(state: AppState, snapshot: Task[]): Focus | null {
+  const nowIds = new Set(state.tasks.map((t) => t.id))
+  const thenIds = new Set(snapshot.map((t) => t.id))
+  const current = state.focus?.id ?? null
+
+  const revived = snapshot.find((t) => !nowIds.has(t.id))?.id
+  if (revived) return focusOn(revived)
+  if (current && thenIds.has(current)) return focusOn(current)
+  // The focused task disappears: fall back to the closest row above it that survives.
+  const rows = tree.flatten(state.tasks)
+  const at = rows.findIndex((r) => r.task.id === current)
+  for (let i = at - 1; i >= 0; i--) if (thenIds.has(rows[i].task.id)) return focusOn(rows[i].task.id)
+  return null
+}
+
+function init(): AppState {
   const tasks = load()
-  return { tasks, focus: tasks.length === 1 && !tasks[0].text ? focusOn(tasks[0].id) : null }
+  return {
+    tasks,
+    focus: tasks.length === 1 && !tasks[0].text ? focusOn(tasks[0].id) : null,
+    past: [],
+    future: [],
+    typing: null,
+  }
 }
 
 export function useTasks() {
-  const [state, dispatch] = useReducer(reducer, undefined, init)
+  const [state, dispatch] = useReducer(withHistory, undefined, init)
 
   // Autosave, lightly debounced so typing doesn't serialise on every key.
   useEffect(() => {
-    const save = () => localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, tasks: state.tasks }))
-    const timer = setTimeout(save, 150)
-    window.addEventListener('beforeunload', save)
+    const flush = () => save(state.tasks)
+    const timer = setTimeout(flush, 150)
+    window.addEventListener('beforeunload', flush)
     return () => {
       clearTimeout(timer)
-      window.removeEventListener('beforeunload', save)
+      window.removeEventListener('beforeunload', flush)
     }
   }, [state.tasks])
 
   // Keep several open tabs in sync.
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
-      if (e.key === STORAGE_KEY && e.newValue) dispatch({ type: 'replace', tasks: JSON.parse(e.newValue).tasks })
+      if (e.key !== STORAGE_KEY) return
+      const tasks = parse(e.newValue)
+      if (tasks.length) dispatch({ type: 'replace', tasks })
     }
     window.addEventListener('storage', onStorage)
     return () => window.removeEventListener('storage', onStorage)
