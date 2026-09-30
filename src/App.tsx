@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BoardView } from './components/BoardView'
 import { ListView } from './components/ListView'
 import type { QuickItem } from './components/QuickActions'
@@ -20,6 +20,10 @@ import { DRAFT_LABEL, draftContext, draftRequest, getDraft, setDraft, usePrefetc
 import type { Meeting } from './ai/meeting'
 import { hideSnoozed, snoozedCount } from './lib/snooze'
 import { NoticeContext, useNoticeValue } from './lib/teach'
+import { useEventLog } from './memory/log'
+
+// The memory is its own view: loaded the first time it opens, so the sheet stays light.
+const MemoryView = lazy(() => import('./memory/MemoryView'))
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
 const M = isMac ? '⌘' : 'Ctrl '
@@ -80,12 +84,15 @@ export default function App() {
   useEffect(() => {
     aiReady.current = ai.available
   }, [ai.available])
+  const { log, merge: mergeLog } = useEventLog(state.tasks, state.external)
+  /** Memoria (Alt+M) is open, starting from this task's pages. */
+  const [memory, setMemory] = useState<{ startTask: string | null } | null>(null)
 
   // Latest values for handlers registered once.
-  const latest = useRef({ tasks: state.tasks, templates, focusId, todayKey })
+  const latest = useRef({ tasks: state.tasks, templates, focusId, todayKey, log })
   useEffect(() => {
-    latest.current = { tasks: state.tasks, templates, focusId, todayKey }
-  }, [state.tasks, templates, focusId, todayKey])
+    latest.current = { tasks: state.tasks, templates, focusId, todayKey, log }
+  }, [state.tasks, templates, focusId, todayKey, log])
 
   const focusTask = focusId ? state.tasks.find((t) => t.id === focusId) : undefined
   const focused = useMemo(
@@ -113,18 +120,19 @@ export default function App() {
   const importFile = useCallback(
     async (file: File) => {
       try {
-        const { tasks, templates: saved } = await readBackup(file)
+        const { tasks, templates: saved, log: history } = await readBackup(file)
         dispatch({ type: 'import', tasks })
         if (saved.length) replaceTemplates(saved)
+        if (history.length) mergeLog(history)
         notify(`${plural(tasks.length, 'tarea')} ${tasks.length === 1 ? 'importada' : 'importadas'} · ${isMac ? '⌘' : 'Ctrl+'}Z deshace`)
       } catch {
         notify('Ese archivo no es una copia de Daily Tracking Tool')
       }
     },
-    [dispatch, notify, replaceTemplates],
+    [dispatch, notify, replaceTemplates, mergeLog],
   )
   const exportAll = useCallback(
-    () => notify(`Copia guardada: ${exportTasks(latest.current.tasks, latest.current.templates)}`),
+    () => notify(`Copia guardada: ${exportTasks(latest.current.tasks, latest.current.templates, latest.current.log)}`),
     [notify],
   )
   const openImport = useCallback(() => fileRef.current?.click(), [])
@@ -400,6 +408,7 @@ export default function App() {
             dispatch({ type: 'focus', id: taskId })
           },
         })),
+        { label: 'Abrir la memoria', hint: `${A}M`, keywords: 'memoria wiki diario grafo panorama graficos historia', run: () => setMemory({ startTask: taskId }) },
         { label: 'Copiar resumen del día', hint: `${A}R`, keywords: 'resumen daily markdown portapapeles', run: () => { copySummary(); dispatch({ type: 'focus', id: taskId }) } },
         { label: 'Buscar', hint: `${M}F`, keywords: 'buscar filtrar search', run: () => setSearching(true) },
         { label: 'Exportar copia', hint: `${M}S`, keywords: 'backup json guardar descargar', run: exportAll },
@@ -452,8 +461,13 @@ export default function App() {
           e.preventDefault()
           dispatch({ type: redo ? 'redo' : 'undo' })
         }
+      } else if (e.altKey && e.code === 'KeyM') {
+        e.preventDefault()
+        const from = activeTaskId()
+        setMemory((m) => (m ? null : { startTask: from }))
       } else if (e.altKey && (e.code === 'Digit1' || e.code === 'Digit2')) {
         e.preventDefault()
+        setMemory(null)
         setView(e.code === 'Digit1' ? 'list' : 'board')
       } else if (e.altKey && e.code === 'KeyT') {
         e.preventDefault()
@@ -520,9 +534,10 @@ export default function App() {
               <button
                 key={v}
                 role="tab"
-                aria-selected={view === v}
+                aria-selected={view === v && !memory}
                 title={`${v === 'list' ? 'Lista' : 'Tablero'} (${isMac ? '⌥' : 'Alt+'}${i + 1})`}
                 onClick={(e) => {
+                  setMemory(null)
                   setView(v)
                   if (e.detail > 0) teach(`view-${v}`, `${A}${i + 1}`)
                 }}
@@ -554,6 +569,29 @@ export default function App() {
           </div>
         </header>
 
+        {memory ? (
+          <Suspense fallback={<main className="sheet" />}>
+            <MemoryView
+              tasks={state.tasks}
+              log={log}
+              startTask={memory.startTask}
+              onClose={() => setMemory(null)}
+              onOpenTask={(id) => {
+                const task = state.tasks.find((t) => t.id === id)
+                setMemory(null)
+                setFocusId(null)
+                setPrefs((p) => ({
+                  ...p,
+                  view: 'list',
+                  filters: { ...p.filters, tag: null, today: false, query: '', hideDone: p.filters.hideDone && task?.status !== 'done' },
+                }))
+                if (task?.snooze) setShowSnoozed(true)
+                requestAnimationFrame(() => dispatch({ type: 'reveal', id }))
+              }}
+            />
+          </Suspense>
+        ) : (
+        <>
         <main className="sheet">
           <div className="sheet-head">
             <h1 className="today">{todayFmt.format(today)}</h1>
@@ -620,7 +658,10 @@ export default function App() {
           <span><kbd>{isMac ? '⌘' : 'Ctrl'}F</kbd> buscar</span>
           <span><kbd>{isMac ? '⌥' : 'Alt+'}T</kbd> hoy</span>
           <span><kbd>{isMac ? '⌥' : 'Alt+'}1</kbd><kbd>{isMac ? '⌥' : 'Alt+'}2</kbd> vista</span>
+          <span><kbd>{isMac ? '⌥' : 'Alt+'}M</kbd> memoria</span>
         </footer>
+        </>
+        )}
 
         {capturing && (
           <QuickCapture
