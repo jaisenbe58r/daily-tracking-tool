@@ -20,17 +20,19 @@ export interface Task {
   priority: boolean
   /** Recurring task: completing it plants the next occurrence right below. */
   repeat: Repeat | null
-  /** Where the task came from (Recoger): the mail or event it opens. */
+  /** Where the task came from (Recoger): the mail, event or meeting note it opens. */
   source?: Source | null
   /** Posponer: hidden (with its subtasks) until `until`; back at the top that day. */
   snooze: Snooze | null
 }
 
 export interface Source {
-  app: 'gmail' | 'calendar'
+  app: 'gmail' | 'calendar' | 'granola'
   url: string
-  /** Gmail thread id or Calendar event id, to read it again (older tasks: read from the url). */
+  /** Gmail thread id, Calendar event id or Granola note id, to read it again (older tasks: read from the url). */
   id?: string
+  /** Granola: the words in the note the task was taken from. */
+  quote?: string
   /** It came from a mail of mine still unanswered: a reply may close it. */
   waiting?: boolean
 }

@@ -4,7 +4,7 @@
  * test; reading the connectors lives in `connectors.ts`.
  */
 
-export type Kind = 'ask' | 'starred' | 'waiting' | 'invite' | 'reply'
+export type Kind = 'ask' | 'starred' | 'waiting' | 'invite' | 'reply' | 'meeting'
 
 export interface Candidate {
   kind: Kind
@@ -12,13 +12,13 @@ export interface Candidate {
   id: string
   /** Last message id, or when the event last changed: a new reply brings a thread back. */
   version: string
-  source: 'Gmail' | 'Calendar'
+  source: 'Gmail' | 'Calendar' | 'Granola'
   title: string
-  /** Who wrote last, or who organizes the meeting. */
+  /** Who wrote last, who organizes the meeting, or who was in it. */
   from: string
-  /** ISO date of the last message, or the event's start. */
+  /** ISO date of the last message, the event's start, or when the meeting was. */
   when: string
-  /** What the model reads: the last message (trimmed), or the event's details. */
+  /** What the model reads: the last message (trimmed), the event's details, or the meeting's notes. */
   body: string
   url: string
   /** `reply`: the open task (its id) this answer may close. */
@@ -60,8 +60,8 @@ export interface CalendarEvent {
 const DAY = 86_400_000
 const BODY_LIMIT = 1200
 
-/** Mail no person wrote: nothing to answer there. */
-const AUTOMATED = /(no-?reply|do-?not-?reply|notifications?@|mailer-daemon|postmaster|calendar-notification|bounce|newsletter|news@|info@|marketing)/i
+/** Mail no person wrote: nothing to answer there. Granola's recaps too: the note itself is read. */
+const AUTOMATED = /(no-?reply|do-?not-?reply|notifications?@|mailer-daemon|postmaster|calendar-notification|bounce|newsletter|news@|info@|marketing|granola)/i
 /** Invitations and RSVPs come by mail too, but the calendar already covers them. */
 const CALENDAR_MAIL = /^(invitaci[oó]n|invitation|invitaci[oó]n actualizada|updated invitation|aceptad[oa]|accepted|rechazad[oa]|declined|tentativ|evento cancelado|canceled event|cancelled event)\b/i
 
@@ -179,6 +179,7 @@ const KIND_LABEL: Record<Kind, string> = {
   waiting: 'esperas respuesta',
   invite: 'invitación sin responder',
   reply: 'respuesta a tu tarea',
+  meeting: 'notas de tu reunión',
 }
 
 /** How the model reads the candidates: `c1`, `c2`… are what it cites back in `notes`. `refOf` names the tasks replies answer. */
@@ -202,9 +203,10 @@ export function describeCandidates(list: Candidate[], refOf: Map<string, string>
  * older ones only have the link: Gmail's `thread-f:<decimal>` is the thread id
  * in hex, and Calendar's `eid` is base64 of "<event id> <calendar>".
  */
-export function sourceId(source: { app: 'gmail' | 'calendar'; url: string; id?: string } | null | undefined): string | null {
+export function sourceId(source: { app: 'gmail' | 'calendar' | 'granola'; url: string; id?: string } | null | undefined): string | null {
   if (!source) return null
   if (source.id) return source.id
+  if (source.app === 'granola') return source.url.match(/\/d\/([^/?#]+)/)?.[1] ?? null
   if (source.app === 'gmail') {
     const m = source.url.match(/thread-f:(\d+)/)
     if (!m) return null
@@ -233,7 +235,7 @@ export interface Watched {
 }
 
 /** Open tasks from a mail that wait on someone: tagged #esperando, or found as "esperas respuesta". */
-export function watchedTasks(tasks: { id: string; status: string; tags: string[]; createdAt: number; source?: { app: 'gmail' | 'calendar'; url: string; id?: string; waiting?: boolean } | null }[]): Watched[] {
+export function watchedTasks(tasks: { id: string; status: string; tags: string[]; createdAt: number; source?: { app: 'gmail' | 'calendar' | 'granola'; url: string; id?: string; waiting?: boolean } | null }[]): Watched[] {
   const out: Watched[] = []
   for (const t of tasks) {
     if (t.status === 'done' || t.source?.app !== 'gmail') continue
