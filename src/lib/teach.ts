@@ -49,6 +49,8 @@ export const useNotice = () => useContext(NoticeContext)
 export function useNoticeValue(notify: (text: string) => void): Notice {
   const teach = useCallback(
     (action: string, keys: string) => {
+      // On a phone or tablet there's no keyboard to teach.
+      if (typeof matchMedia !== 'undefined' && matchMedia('(hover: none)').matches) return
       if (shouldTeach(action)) notify(`La próxima vez: ${keys}`)
     },
     [notify],
