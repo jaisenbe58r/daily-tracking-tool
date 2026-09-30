@@ -49,6 +49,8 @@ Al pulsar Enter (o salir de la línea), el texto se interpreta:
 
 **Resumen del día** (`Alt+R`): copia al portapapeles un Markdown con lo hecho hoy (con su proyecto) y lo que está en curso, listo para pegar en un chat o un correo.
 
+**Memoria** (`Alt+M`, o `/` → «Abrir la memoria»): la hoja compilada en páginas enlazadas, al estilo del LLM Wiki de Karpathy. Cada tarea con dos o más subtareas es un **proyecto**, cada `#tema` y cada `@persona` escrita en una tarea (`Llamar a @luis`) tiene su página, y cada día una entrada de **diario**. En cada página, la **Trama** cruza lo relacionado con las semanas: una fila lleva a esa página, una celda al día. El **Panorama** resume cómo trabajas en cinco gráficos (Pulso, Estratos, Vuelo, Deriva y Balance). `/` busca, `←`/`→` pasan de día, `Alt+←` vuelve por el recorrido, `Esc` regresa al folio y pulsar una tarea te lleva a ella. Nada se escribe en la memoria: se recalcula de la hoja y de un historial de cambios que la app guarda sola en el navegador (IndexedDB) y que va dentro de la copia JSON.
+
 **Plantillas**: en `/`, «Guardar como plantilla» guarda la tarea con sus subtareas; luego «Plantilla · nombre» la inserta (sin estados ni fechas). Para borrar una, escribe «borrar» en el menú. Las plantillas viajan en la copia JSON.
 
 **Copia de seguridad**: `Cmd/Ctrl+S` descarga todo en JSON; `Cmd/Ctrl+O` (o soltar el archivo sobre la página) lo restaura. Importar reemplaza la hoja y se puede deshacer.
@@ -98,6 +100,7 @@ Sin clave, la app funciona igual y las acciones de IA no aparecen. `AI_MODEL` ca
 | `Cmd/Ctrl+F` | Buscar |
 | `Alt+F` | Modo foco en la tarea actual |
 | `Alt+R` | Copiar el resumen del día |
+| `Alt+M` | Abrir o cerrar la memoria |
 | `Cmd/Ctrl+S` · `Cmd/Ctrl+O` | Exportar · importar copia JSON |
 
 En el **Board** (`Alt+2`, o `Alt+1` para volver a la lista):
