@@ -3,9 +3,10 @@ import type { Task } from '../../lib/types'
 import type { AiMode } from '../config'
 import { markSeen, isSeen } from './seen'
 import { watchedTasks } from './sources'
+import { knownNotes } from './granola'
 import type { Found } from './extract'
 
-/** How often the mail and calendar are read again while the page is in view. */
+/** How often the sources are read again while the page is in view. */
 const EVERY_MS = 15 * 60_000
 /** A manual «Recoger» reuses a check this fresh instead of reading everything again. */
 const FRESH_MS = 2 * 60_000
@@ -13,7 +14,7 @@ const FRESH_MS = 2 * 60_000
 export type Taken = { found: Found } | { none: true; problem?: string }
 
 /**
- * «Recoger»: tasks hiding in the user's mail and calendar. Runs by itself when
+ * «Recoger»: tasks hiding in the user's mail, calendar and meeting notes. Runs by itself when
  * the page opens and every 15 minutes while it's in view, so the header can
  * say how many tasks are waiting; nothing reaches the sheet until the user
  * opens them (Alt+I) and accepts. Only inside claude.ai, where the page can
@@ -49,7 +50,7 @@ export function useInbox(mode: AiMode | null, tasks: Task[], today: string) {
     if (running.current) return running.current
     const run = (async () => {
       const { gather } = await import('./connectors')
-      const gathered = await gather(isSeen, watchedTasks(latest.current.tasks))
+      const gathered = await gather(isSeen, watchedTasks(latest.current.tasks), knownNotes(latest.current.tasks))
       checkedAt.current = Date.now()
       if (!gathered) return
       const { candidates, problems } = gathered
@@ -101,7 +102,7 @@ export function useInbox(mode: AiMode | null, tasks: Task[], today: string) {
     if (running.current) await running.current
     else if (!latest.current.found && Date.now() - checkedAt.current > FRESH_MS) {
       const { gather } = await import('./connectors')
-      const gathered = await gather(isSeen, watchedTasks(latest.current.tasks))
+      const gathered = await gather(isSeen, watchedTasks(latest.current.tasks), knownNotes(latest.current.tasks))
       checkedAt.current = Date.now()
       if (!gathered) return { none: true, problem: 'Esta página no puede leer tu correo aquí' }
       setProblem(gathered.problems[0] ?? null)
@@ -124,5 +125,6 @@ export function useInbox(mode: AiMode | null, tasks: Task[], today: string) {
     [setFound],
   )
 
-  return { available, count: found?.count ?? 0, replies: found?.replies ?? 0, take, clear }
+  const meetings = found?.ops.filter((op) => op.op === 'add' && op.source?.app === 'granola').length ?? 0
+  return { available, count: found?.count ?? 0, replies: found?.replies ?? 0, meetings, take, clear }
 }

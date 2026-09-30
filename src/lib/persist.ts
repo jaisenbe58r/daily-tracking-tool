@@ -11,16 +11,17 @@ const REPEATS: Repeat[] = ['daily', 'weekdays', 'weekly', 'monthly']
  * drops duplicates and re-roots tasks whose parent no longer exists or that
  * form a cycle, so a bad write can never leave the sheet unusable.
  */
-/** Tasks from mail or calendar. The first version kept the link in the notes; it moves out of the way. */
+/** Tasks from mail, calendar or meeting notes. The first version kept the link in the notes; it moves out of the way. */
 function readSource(r: Record<string, unknown>): Pick<Task, 'source'> & Partial<Pick<Task, 'notes'>> {
   const s = r.source as Partial<Source> | null | undefined
-  if (s && (s.app === 'gmail' || s.app === 'calendar') && typeof s.url === 'string' && s.url.startsWith('https://')) {
+  if (s && (s.app === 'gmail' || s.app === 'calendar' || s.app === 'granola') && typeof s.url === 'string' && s.url.startsWith('https://')) {
     return {
       source: {
         app: s.app,
         url: s.url,
         ...(typeof s.id === 'string' && s.id ? { id: s.id } : {}),
         ...(s.waiting === true ? { waiting: true } : {}),
+        ...(typeof s.quote === 'string' && s.quote ? { quote: s.quote } : {}),
       },
     }
   }

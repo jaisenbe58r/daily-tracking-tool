@@ -310,7 +310,7 @@ export default function App() {
         cancelAi()
         setCapturing(false)
         restoreFocus()
-        notify(got.problem ?? 'Nada nuevo en tu correo ni en tu agenda')
+        notify(got.problem ?? 'Nada nuevo en tu correo, tu agenda ni tus reuniones')
       }
     } catch (error) {
       if (run === captureRun.current) fail(RECOGER, error)
@@ -340,10 +340,10 @@ export default function App() {
       const name = task?.text.trim()
       return [
         ...(inbox.available
-          ? [{ label: RECOGER, hint: `${A}I`, keywords: 'ia ai correo gmail email agenda calendario calendar recoger bandeja invitaciones', run: () => void recoger() }]
+          ? [{ label: RECOGER, hint: `${A}I`, keywords: 'ia ai correo gmail email agenda calendario calendar recoger bandeja invitaciones granola reuniones notas actas', run: () => void recoger() }]
           : []),
         ...(task?.source
-          ? [{ label: 'Abrir el correo o evento de origen', hint: `${A}O`, keywords: 'abrir origen correo gmail evento calendario', run: () => {
+          ? [{ label: 'Abrir el correo, evento o nota de origen', hint: `${A}O`, keywords: 'abrir origen correo gmail evento calendario granola nota reunion', run: () => {
               dispatch({ type: 'focus', id: taskId })
               requestAnimationFrame(() => openSource())
             } }]
@@ -539,7 +539,7 @@ export default function App() {
                   <span className="word">
                     {' '}
                     {!inbox.replies
-                      ? `${inbox.count === 1 ? 'tarea' : 'tareas'} en tu correo`
+                      ? `${inbox.count === 1 ? 'tarea' : 'tareas'} ${inbox.meetings === inbox.count ? 'de tus reuniones' : inbox.meetings ? 'por recoger' : 'en tu correo'}`
                       : inbox.replies === inbox.count
                         ? `${inbox.count === 1 ? 'respuesta' : 'respuestas'} en tu correo`
                         : 'novedades en tu correo'}

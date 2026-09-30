@@ -12,9 +12,10 @@ import {
   type Kind,
   type Watched,
 } from './sources'
+import { candidatesFromMeetings, isEmptyList, meetingsWith, parseMeetings, payloadText, type GranolaMeeting } from './granola'
 
 /**
- * Reads the user's Gmail and Google Calendar through their own claude.ai
+ * Reads the user's Gmail, Google Calendar and Granola through their own claude.ai
  * connectors: the page never sees a token, claude.ai asks once per connector,
  * and only read tools are declared (see the publish manifest in the README).
  * Outside claude.ai there is no way in, and `connectors()` says so with null.
@@ -28,6 +29,7 @@ interface McpError {
 
 export const GMAIL = 'Gmail'
 export const CALENDAR = 'Google Calendar'
+export const GRANOLA = 'Granola'
 
 let mcp: Promise<Mcp | null> | null = null
 export function connectors(): Promise<Mcp | null> {
@@ -41,6 +43,7 @@ export function sourceProblem(server: string, error: unknown): string {
   if (code === 'needs_reauth') return `Vuelve a conectar ${server} en claude.ai (Ajustes → Conectores)`
   if (code === 'server_not_connected' || code === 'selection_required') return `Conecta ${server} en claude.ai (Ajustes → Conectores)`
   if (code === 'not_in_manifest' || code === 'not_granted') return `Esta página no tiene permiso para leer ${server}`
+  if (code === 'unreadable') return `${server} respondió algo que no sé leer: no he propuesto nada de ahí`
   return `${server} no respondió`
 }
 
@@ -124,6 +127,46 @@ async function calendar(m: Mcp, me: Set<string>, now: number): Promise<Candidate
   return candidatesFromEvents(payload.events ?? [], me)
 }
 
+/** Granola answers in text; anything else than its meeting list is a problem to show, not "nothing new". */
+function meetingsIn(payload: unknown): GranolaMeeting[] {
+  const text = payloadText(payload)
+  const meetings = parseMeetings(text)
+  if (meetings === null || (!meetings.length && text.trim() && !isEmptyList(text))) throw Object.assign(new Error('unreadable'), { code: 'unreadable' })
+  return meetings
+}
+
+const isoDay = (ms: number) => new Date(ms).toISOString().slice(0, 10)
+
+async function listMeetings(m: Mcp, from: number, to: number): Promise<GranolaMeeting[]> {
+  const payload = (await m.callTool(GRANOLA, 'list_meetings', { time_range: 'custom', custom_start: isoDay(from), custom_end: isoDay(to) }, { cache: false })).payload
+  return meetingsIn(payload)
+}
+
+/** Notes (summary and the user's own) of these meetings, ten per call as Granola allows. */
+async function readMeetings(m: Mcp, ids: string[]): Promise<GranolaMeeting[]> {
+  const chunks: string[][] = []
+  for (let i = 0; i < ids.length; i += 10) chunks.push(ids.slice(i, i + 10))
+  const read = await pool(chunks, 2, async (meeting_ids) => meetingsIn((await m.callTool(GRANOLA, 'get_meetings', { meeting_ids }, { cache: false })).payload))
+  return read.flat()
+}
+
+/** Meeting notes of the last two weeks not proposed yet. A note still empty waits for a later check. */
+async function granola(m: Mcp, now: number, seen: Seen, known: Set<string>): Promise<Candidate[]> {
+  const listed = await listMeetings(m, now - GRANOLA_DAYS * DAY_MS, now + DAY_MS)
+  const fresh = listed
+    .filter((x) => !(x.at > now) && !known.has(x.id) && !seen({ id: x.id, version: 'notas' }))
+    .sort((a, b) => (b.at || 0) - (a.at || 0))
+    .slice(0, MAX_MEETINGS)
+  if (!fresh.length) return []
+  const read = new Map((await readMeetings(m, fresh.map((x) => x.id))).map((x) => [x.id, x]))
+  // Keep the list's order and participants when the details leave them out.
+  return candidatesFromMeetings(fresh.map((x) => read.get(x.id)).filter((x): x is GranolaMeeting => Boolean(x)).map((x) => ({ ...x, participants: x.participants.length ? x.participants : (listed.find((l) => l.id === x.id)?.participants ?? []) })))
+}
+const DAY_MS = 86_400_000
+const GRANOLA_DAYS = 14
+/** Notes read in full per check. The rest waits for the next one. */
+const MAX_MEETINGS = 20
+
 /** Threads the user is waiting on, read again: did someone answer since the task was written? */
 async function replies(m: Mcp, me: Set<string>, watched: Watched[]): Promise<Candidate[]> {
   const found = await pool(watched.slice(0, MAX_WATCHED), 4, async (w) => {
@@ -141,10 +184,11 @@ export interface Gathered {
 }
 
 /**
- * Everything that may hide a task, from both sources. A source that fails
- * doesn't stop the other. `seen` skips threads and events already proposed.
+ * Everything that may hide a task, from every source. A source that fails
+ * doesn't stop the others. `seen` skips threads, events and notes already
+ * proposed; `known` are the sources tasks on the sheet already came from.
  */
-export async function gather(seen: Seen, watched: Watched[] = []): Promise<Gathered | null> {
+export async function gather(seen: Seen, watched: Watched[] = [], known: Set<string> = new Set()): Promise<Gathered | null> {
   const m = await connectors()
   if (!m) return null
   const now = Date.now()
@@ -159,9 +203,13 @@ export async function gather(seen: Seen, watched: Watched[] = []): Promise<Gathe
     problems.push(sourceProblem(GMAIL, error))
     return []
   })
+  const notes = await granola(m, now, seen, known).catch((error) => {
+    problems.push(sourceProblem(GRANOLA, error))
+    return []
+  })
   // Replies first: a thread that answers a waiting task is that, not a new question.
   const answers = await replies(m, me, watched).catch(() => [])
-  const candidates = dedupe([...answers, ...mails, ...events]).filter((c) => !seen(c))
+  const candidates = dedupe([...answers, ...mails, ...events, ...notes]).filter((c) => !seen(c))
   return { candidates, problems }
 }
 
@@ -196,4 +244,18 @@ export async function mailWith(people: string[], days = 45): Promise<GmailThread
     view: 'THREAD_VIEW_MINIMAL',
   }).catch(() => ({ threads: [] as GmailThread[] }))
   return threads
+}
+
+/** Up to three earlier Granola notes with any of these people, newest first. Empty when Granola can't be read. */
+export async function notesWith(people: string[], before: number, days = 60): Promise<GranolaMeeting[]> {
+  const m = await connectors()
+  if (!m || !people.length) return []
+  try {
+    const shared = meetingsWith(await listMeetings(m, before - days * DAY_MS, before), people, before).slice(0, 3)
+    if (!shared.length) return []
+    const read = await readMeetings(m, shared.map((x) => x.id))
+    return shared.map((x) => read.find((r) => r.id === x.id) ?? x)
+  } catch {
+    return []
+  }
 }

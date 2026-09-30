@@ -1,6 +1,6 @@
 import { memo, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import type { Action, Focus } from '../lib/store'
-import type { Group, Row } from '../lib/types'
+import type { Group, Row, Source } from '../lib/types'
 import { DueLabel } from './DueLabel'
 import { ageInDays, isStale } from '../lib/daily'
 import { useToday } from '../lib/today'
@@ -8,6 +8,9 @@ import { daysAway, isBack, isSnoozed, WAITING_TAG } from '../lib/snooze'
 import { dueLabel } from '../lib/parse'
 import { useNotice } from '../lib/teach'
 import { useHasDraft } from '../ai/drafts'
+
+const SOURCE_APP: Record<Source['app'], string> = { gmail: 'Gmail', calendar: 'Google Calendar', granola: 'Granola' }
+const SOURCE_LABEL: Record<Source['app'], string> = { gmail: 'Gmail', calendar: 'Agenda', granola: 'Granola' }
 
 interface Props {
   row: Row
@@ -298,9 +301,9 @@ function TaskRowImpl({ row, focus, dragging, dispatch, onOpenActions, onDragStar
               target="_blank"
               rel="noopener"
               tabIndex={-1}
-              title={`Abrir en ${task.source.app === 'gmail' ? 'Gmail' : 'Google Calendar'} (${isMac ? '⌥' : 'Alt+'}O)`}
+              title={`${task.source.quote ? `«${task.source.quote}»\n` : ''}Abrir en ${SOURCE_APP[task.source.app]} (${isMac ? '⌥' : 'Alt+'}O)`}
             >
-              {task.source.app === 'gmail' ? 'Gmail' : 'Agenda'}
+              {SOURCE_LABEL[task.source.app]}
               <svg width="8" height="8" viewBox="0 0 8 8" aria-hidden>
                 <path d="M2 6l4-4M3 2h3v3" fill="none" stroke="currentColor" strokeWidth="1.1" />
               </svg>
