@@ -1,0 +1,133 @@
+import type { Repeat, Snooze, Source, Status, Task } from './types'
+import { newTask } from './tree'
+
+export const STORAGE_KEY = 'daily-tracking-tool:v1'
+
+const STATUSES: Status[] = ['todo', 'doing', 'done']
+const REPEATS: Repeat[] = ['daily', 'weekdays', 'weekly', 'monthly']
+
+/**
+ * Turns whatever is in storage into a valid task list: fills missing fields,
+ * drops duplicates and re-roots tasks whose parent no longer exists or that
+ * form a cycle, so a bad write can never leave the sheet unusable.
+ */
+/** Tasks from mail, calendar or meeting notes. The first version kept the link in the notes; it moves out of the way. */
+function readSource(r: Record<string, unknown>): Pick<Task, 'source'> & Partial<Pick<Task, 'notes'>> {
+  const s = r.source as Partial<Source> | null | undefined
+  if (s && (s.app === 'gmail' || s.app === 'calendar' || s.app === 'granola') && typeof s.url === 'string' && s.url.startsWith('https://')) {
+    return {
+      source: {
+        app: s.app,
+        url: s.url,
+        ...(typeof s.id === 'string' && s.id ? { id: s.id } : {}),
+        ...(s.waiting === true ? { waiting: true } : {}),
+        ...(typeof s.quote === 'string' && s.quote ? { quote: s.quote } : {}),
+      },
+    }
+  }
+  const legacy = typeof r.notes === 'string' ? r.notes.match(/^(Gmail|Google Calendar) · [^\n]*\n(https:\/\/\S+)$/) : null
+  if (legacy) return { source: { app: legacy[1] === 'Gmail' ? 'gmail' : 'calendar', url: legacy[2] }, notes: '' }
+  return {}
+}
+
+export function sanitize(input: unknown): Task[] {
+  if (!Array.isArray(input)) return []
+  const seen = new Set<string>()
+  const tasks: Task[] = []
+  for (const raw of input) {
+    if (!raw || typeof raw !== 'object') continue
+    const r = raw as Record<string, unknown>
+    if (typeof r.id !== 'string' || seen.has(r.id)) continue
+    seen.add(r.id)
+    const status = STATUSES.includes(r.status as Status) ? (r.status as Status) : 'todo'
+    tasks.push({
+      id: r.id,
+      text: typeof r.text === 'string' ? r.text : '',
+      notes: typeof r.notes === 'string' ? r.notes : '',
+      tags: Array.isArray(r.tags) ? [...new Set(r.tags.filter((t): t is string => typeof t === 'string'))] : [],
+      status,
+      parentId: typeof r.parentId === 'string' ? r.parentId : null,
+      collapsed: r.collapsed === true,
+      createdAt: typeof r.createdAt === 'number' ? r.createdAt : Date.now(),
+      completedAt: status === 'done' && typeof r.completedAt === 'number' ? r.completedAt : null,
+      due: typeof r.due === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.due) ? r.due : null,
+      priority: r.priority === true,
+      repeat: REPEATS.includes(r.repeat as Repeat) ? (r.repeat as Repeat) : null,
+      ...readSource(r),
+      snooze: sanitizeSnooze(r.snooze),
+    })
+  }
+  const byId = new Map(tasks.map((t) => [t.id, t]))
+  for (const task of tasks) {
+    if (task.parentId && !byId.has(task.parentId)) task.parentId = null
+    // Walk up; if we come back to this task, cut the loop here.
+    const visited = new Set([task.id])
+    for (let p = task.parentId; p; p = byId.get(p)?.parentId ?? null) {
+      if (visited.has(p)) {
+        task.parentId = null
+        break
+      }
+      visited.add(p)
+    }
+  }
+  return tasks
+}
+
+const DAY = /^\d{4}-\d{2}-\d{2}$/
+
+function sanitizeSnooze(raw: unknown): Snooze | null {
+  const s = raw as Partial<Snooze> | null
+  return s && typeof s.until === 'string' && DAY.test(s.until) && typeof s.since === 'string' && DAY.test(s.since)
+    ? { until: s.until, since: s.since }
+    : null
+}
+
+export function parse(raw: string | null): Task[] {
+  if (!raw) return []
+  try {
+    return sanitize(JSON.parse(raw)?.tasks)
+  } catch {
+    return []
+  }
+}
+
+/** Where an unreadable sheet is set aside before a fresh one is saved over it. */
+export const RESCUE_KEY = `${STORAGE_KEY}:rescate`
+
+/** True when `raw` holds something but not a sheet we can read (a half-written or hand-edited save). */
+export function isUnreadable(raw: string | null): boolean {
+  if (!raw) return false
+  try {
+    return !Array.isArray(JSON.parse(raw)?.tasks)
+  } catch {
+    return true
+  }
+}
+
+/** Set when this load found an unreadable save and kept a copy under RESCUE_KEY. */
+export let rescued = false
+
+export function load(): Task[] {
+  let raw: string | null = null
+  try {
+    raw = localStorage.getItem(STORAGE_KEY)
+    // Never save a blank sheet over data we couldn't read: keep the original aside first.
+    if (isUnreadable(raw) && localStorage.getItem(RESCUE_KEY) !== raw) {
+      localStorage.setItem(RESCUE_KEY, raw as string)
+      rescued = true
+    }
+  } catch {
+    // Storage blocked (private mode, policy): work in memory.
+  }
+  const tasks = parse(raw)
+  return tasks.length ? tasks : [newTask()]
+}
+
+export function save(tasks: Task[]): boolean {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, tasks }))
+    return true
+  } catch {
+    return false
+  }
+}
