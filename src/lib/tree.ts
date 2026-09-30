@@ -13,6 +13,7 @@ export function newTask(parentId: string | null = null, text = ''): Task {
     completedAt: null,
     due: null,
     priority: false,
+    repeat: null,
   }
 }
 

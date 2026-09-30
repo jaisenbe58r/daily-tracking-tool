@@ -1,9 +1,10 @@
-import type { Status, Task } from './types'
+import type { Repeat, Status, Task } from './types'
 import { newTask } from './tree'
 
 export const STORAGE_KEY = 'daily-tracking-tool:v1'
 
 const STATUSES: Status[] = ['todo', 'doing', 'done']
+const REPEATS: Repeat[] = ['daily', 'weekdays', 'weekly', 'monthly']
 
 /**
  * Turns whatever is in storage into a valid task list: fills missing fields,
@@ -32,6 +33,7 @@ export function sanitize(input: unknown): Task[] {
       completedAt: status === 'done' && typeof r.completedAt === 'number' ? r.completedAt : null,
       due: typeof r.due === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.due) ? r.due : null,
       priority: r.priority === true,
+      repeat: REPEATS.includes(r.repeat as Repeat) ? (r.repeat as Repeat) : null,
     })
   }
   const byId = new Map(tasks.map((t) => [t.id, t]))

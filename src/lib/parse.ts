@@ -8,7 +8,12 @@
  * - A date at the end of the line ("hoy", "mañana", "pasado mañana", a weekday,
  *   "3/10"), or anywhere with an `@` ("@viernes"). Only the end of the line is
  *   read without `@`, so "informe de mañana para Ana" stays as written.
+ * - A recurrence at the end ("cada día", "cada lunes", "cada mes", "entre semana"):
+ *   completing the task plants the next one.
  */
+
+import { firstDue, parseRepeat } from './repeat'
+import type { Repeat } from './types'
 
 export interface Parsed {
   text: string
@@ -16,6 +21,7 @@ export interface Parsed {
   priority: boolean
   /** Local date as YYYY-MM-DD. */
   due: string | null
+  repeat: Repeat | null
 }
 
 const TAG_RE = /(^|\s)#([\p{L}\p{N}_-]+)/gu
@@ -82,6 +88,16 @@ export function parseTask(input: string, now = new Date()): Parsed {
     return lead
   })
 
+  let repeat: Repeat | null = null
+  const takeRepeat = () => {
+    const r = parseRepeat(text, now)
+    if (!r) return
+    repeat = r.repeat
+    text = r.text
+    due ??= r.due
+  }
+  takeRepeat()
+
   if (!due) {
     // Trailing phrase: try the last two words, then the last one. Never eat the whole line.
     const words = text.trim().split(/\s+/)
@@ -94,9 +110,12 @@ export function parseTask(input: string, now = new Date()): Parsed {
         break
       }
     }
+    // "Pagar alquiler cada mes 1/10": the date came last.
+    if (!repeat) takeRepeat()
   }
+  if (repeat && !due) due = firstDue(repeat, dateKey(now))
 
-  return { text: text.replace(/\s{2,}/g, ' ').trim(), tags: [...new Set(tags)], priority, due }
+  return { text: text.replace(/\s{2,}/g, ' ').trim(), tags: [...new Set(tags)], priority, due, repeat }
 }
 
 const dueFmt = new Intl.DateTimeFormat('es-ES', { weekday: 'short', day: 'numeric', month: 'short' })

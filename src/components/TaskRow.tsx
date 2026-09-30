@@ -224,7 +224,7 @@ function TaskRowImpl({ row, focus, dragging, dispatch, onOpenActions, onDragStar
             onPaste={onPaste}
             onBlur={() => dispatch({ type: 'commit', id: task.id })}
           />
-          {task.due && <DueLabel due={task.due} done={task.status === 'done'} />}
+          {task.due && <DueLabel due={task.due} done={task.status === 'done'} repeat={task.repeat} />}
           {context && <span className="context" title={context}>{context}</span>}
           {task.tags.length > 0 && (
             <span className="tags">

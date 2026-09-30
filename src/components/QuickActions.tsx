@@ -1,11 +1,18 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { Action } from '../lib/store'
-import type { Task } from '../lib/types'
+import type { Repeat, Task } from '../lib/types'
 import { useToday } from '../lib/today'
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
 const M = isMac ? '⌘' : 'Ctrl '
 const A = isMac ? '⌥' : 'Alt '
+
+const REPEATS: { repeat: Repeat; label: string }[] = [
+  { repeat: 'daily', label: 'cada día' },
+  { repeat: 'weekdays', label: 'entre semana' },
+  { repeat: 'weekly', label: 'cada semana' },
+  { repeat: 'monthly', label: 'cada mes' },
+]
 
 export interface QuickItem {
   label: string
@@ -76,6 +83,14 @@ export function QuickActions({ task, hasChildren, anchor, dispatch, extra, onClo
           focusText()
         },
       },
+      ...(task.repeat
+        ? [{ label: 'Quitar repetición', hint: '↻', keywords: 'repetir recurrente', run: () => { dispatch({ type: 'set-repeat', id, repeat: null }); focusText() } }]
+        : REPEATS.map(({ repeat, label }) => ({
+            label: `Repetir ${label}`,
+            keywords: 'repetir recurrente rutina',
+            searchOnly: true,
+            run: () => { dispatch({ type: 'set-repeat', id, repeat }); focusText() },
+          }))),
       { label: 'Subtarea', keywords: 'hija child nueva', run: () => dispatch({ type: 'add-child', id }) },
       { label: 'Indentar', hint: 'Tab', keywords: 'subtarea nivel', run: () => dispatch({ type: 'indent', id }) },
       { label: 'Subir nivel', hint: '⇧Tab', keywords: 'outdent desindentar', run: () => dispatch({ type: 'outdent', id }) },
@@ -92,7 +107,7 @@ export function QuickActions({ task, hasChildren, anchor, dispatch, extra, onClo
     }
     list.push({ label: 'Eliminar', keywords: 'borrar delete', run: () => dispatch({ type: 'remove', id }) })
     return [...list, ...extra]
-  }, [dispatch, id, task.status, task.text, task.collapsed, task.due, task.priority, today, hasChildren, extra])
+  }, [dispatch, id, task.status, task.text, task.collapsed, task.due, task.priority, task.repeat, today, hasChildren, extra])
 
   const q = query.trim().toLowerCase()
   const filtered = q ? items.filter((i) => `${i.label} ${i.keywords ?? ''}`.toLowerCase().includes(q)) : items.filter((i) => !i.searchOnly)

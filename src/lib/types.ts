@@ -18,7 +18,12 @@ export interface Task {
   /** Local date (YYYY-MM-DD) the task is planned for; drives the Today view. */
   due: string | null
   priority: boolean
+  /** Recurring task: completing it plants the next occurrence right below. */
+  repeat: Repeat | null
 }
+
+/** `weekly` keeps the weekday of its date; `monthly` its day of the month. */
+export type Repeat = 'daily' | 'weekdays' | 'weekly' | 'monthly'
 
 export interface Row {
   task: Task

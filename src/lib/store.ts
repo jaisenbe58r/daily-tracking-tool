@@ -1,9 +1,10 @@
 import { useEffect, useReducer } from 'react'
-import type { Inherit, Status, Task } from './types'
+import type { Inherit, Repeat, Status, Task } from './types'
 import * as tree from './tree'
 import { STORAGE_KEY, load, parse, save } from './persist'
 import { dateKey, parseOutline, parseTask } from './parse'
 import { carryOver } from './daily'
+import { firstDue, plantNext } from './repeat'
 
 export type Caret = number | 'start' | 'end'
 
@@ -52,6 +53,7 @@ export type Action =
   | { type: 'move-to'; id: string; parentId: string | null; beforeId: string | null }
   | { type: 'set-status'; id: string; status: Status }
   | { type: 'toggle-done'; id: string }
+  | { type: 'set-repeat'; id: string; repeat: Repeat | null }
   | { type: 'toggle-collapse'; id: string }
   | { type: 'remove'; id: string; focusPrev?: boolean }
   | { type: 'focus'; id: string; target?: Focus['target']; caret?: Caret }
@@ -76,13 +78,14 @@ function withStatus(task: Task, status: Status): Partial<Task> {
 /** Applies the quick-capture grammar (#tag, !, dates) to a task's text. */
 function captured(task: Task): Task {
   const parsed = parseTask(task.text)
-  if (parsed.text === task.text && !parsed.tags.length && !parsed.priority && !parsed.due) return task
+  if (parsed.text === task.text && !parsed.tags.length && !parsed.priority && !parsed.due && !parsed.repeat) return task
   return {
     ...task,
     text: parsed.text,
     tags: [...new Set([...task.tags, ...parsed.tags])],
     priority: task.priority || parsed.priority,
     due: parsed.due ?? task.due,
+    repeat: parsed.repeat ?? task.repeat,
   }
 }
 
@@ -183,14 +186,24 @@ function reducer(state: State, action: Exclude<Action, { type: 'undo' | 'redo' }
 
     case 'set-status': {
       const task = find(action.id)
-      return task ? { ...state, tasks: tree.update(tasks, task.id, withStatus(task, action.status)) } : state
+      if (!task) return state
+      const next = tree.update(tasks, task.id, withStatus(task, action.status))
+      return { ...state, tasks: action.status === 'done' && task.status !== 'done' ? plantNext(next, task.id, dateKey(new Date())) : next }
     }
 
     case 'toggle-done': {
       const task = find(action.id)
       if (!task) return state
       const status: Status = task.status === 'done' ? 'todo' : 'done'
-      return { ...state, tasks: tree.update(tasks, task.id, withStatus(task, status)) }
+      const next = tree.update(tasks, task.id, withStatus(task, status))
+      return { ...state, tasks: status === 'done' ? plantNext(next, task.id, dateKey(new Date())) : next }
+    }
+
+    case 'set-repeat': {
+      const task = find(action.id)
+      if (!task || task.repeat === action.repeat) return state
+      const due = action.repeat && !task.due ? firstDue(action.repeat, dateKey(new Date())) : task.due
+      return { ...state, tasks: tree.update(tasks, task.id, { repeat: action.repeat, due }) }
     }
 
     case 'toggle-collapse': {

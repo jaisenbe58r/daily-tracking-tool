@@ -241,7 +241,7 @@ export function BoardView({ tasks, dispatch, filters, onTagClick }: Props) {
                   {(task.tags.length > 0 || total > 0 || task.due || task.priority) && (
                     <div className="card-meta">
                       {task.priority && <span className="prio" title="Prioridad">!</span>}
-                      {task.due && <DueLabel due={task.due} done={task.status === 'done'} />}
+                      {task.due && <DueLabel due={task.due} done={task.status === 'done'} repeat={task.repeat} />}
                       {total > 0 && (
                         <span className="card-progress" title={`${done} de ${total} subtareas hechas`}>
                           {done}/{total}

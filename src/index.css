@@ -9,6 +9,9 @@
   --grey: #6b6b6b;
   --rule: #e0e0e0;
   --green: #00ff79;
+  /* What sits on the green: always black, in both themes. */
+  --on-green: #0a0a0a;
+  --shade: #0a0a0a;
 
   --ink-soft: color-mix(in srgb, var(--ink) 55%, var(--paper));
   --wash: color-mix(in srgb, var(--ink) 2.5%, var(--paper));
@@ -28,6 +31,18 @@
   line-height: 24px;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+/* Dark: the same sheet inverted. Follows the system, no switch to look after. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #0c0c0c;
+    --ink: #ededed;
+    --grey: #8a8a8a;
+    --rule: #262626;
+    --shade: #000000;
+    color-scheme: dark;
+  }
 }
 
 * { box-sizing: border-box; }
@@ -306,8 +321,8 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 }
 .row[data-status='done'] .check {
   background: var(--green);
-  border-color: var(--ink);
-  color: var(--ink);
+  border-color: var(--on-green);
+  color: var(--on-green);
   animation: check-pop 220ms var(--ease);
 }
 @keyframes check-pop {
@@ -391,6 +406,7 @@ textarea::placeholder { color: color-mix(in srgb, var(--grey) 60%, var(--paper))
 .due[data-when='today'] { color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
 .due[data-when='overdue'] { color: var(--paper); background: var(--ink); }
 .card-meta .due { margin-top: 0; }
+.due .repeat { margin-right: 4px; letter-spacing: 0; }
 
 .context {
   flex: 0 1 auto;
@@ -536,7 +552,7 @@ textarea::placeholder { color: color-mix(in srgb, var(--grey) 60%, var(--paper))
 .card-line { display: flex; align-items: flex-start; gap: 10px; }
 .card-line .check { margin: 2px 0 0; }
 .card[data-status='doing'] .check { border-color: var(--ink); background: linear-gradient(90deg, var(--ink) 0 50%, transparent 50%); }
-.card[data-status='done'] .check { background: var(--green); border-color: var(--ink); color: var(--ink); }
+.card[data-status='done'] .check { background: var(--green); border-color: var(--on-green); color: var(--on-green); }
 .card-text { flex: 1; min-width: 0; margin: 0; font-size: 14px; line-height: 21px; overflow-wrap: anywhere; cursor: text; }
 .card-input { font-size: 14px; line-height: 21px; }
 .card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
@@ -549,7 +565,7 @@ textarea::placeholder { color: color-mix(in srgb, var(--grey) 60%, var(--paper))
   z-index: 30;
   pointer-events: none;
   border-color: var(--ink);
-  box-shadow: 0 18px 40px -16px color-mix(in srgb, var(--ink) 35%, transparent);
+  box-shadow: 0 18px 40px -16px color-mix(in srgb, var(--shade) 35%, transparent);
   animation: none;
 }
 
@@ -620,7 +636,7 @@ textarea::placeholder { color: color-mix(in srgb, var(--grey) 60%, var(--paper))
   background: var(--paper);
   border: 1px solid var(--ink);
   border-radius: 10px;
-  box-shadow: 0 24px 48px -24px color-mix(in srgb, var(--ink) 40%, transparent);
+  box-shadow: 0 24px 48px -24px color-mix(in srgb, var(--shade) 40%, transparent);
   animation: capture-in 160ms var(--ease);
 }
 @keyframes capture-in {
@@ -662,7 +678,7 @@ textarea::placeholder { color: color-mix(in srgb, var(--grey) 60%, var(--paper))
   background: var(--paper);
   border: 1px solid var(--rule);
   border-radius: 8px;
-  box-shadow: 0 12px 32px -12px color-mix(in srgb, var(--ink) 25%, transparent);
+  box-shadow: 0 12px 32px -12px color-mix(in srgb, var(--shade) 25%, transparent);
   animation: qa-in 140ms var(--ease);
 }
 .ai-summary { font-size: 14px; }
@@ -672,7 +688,7 @@ textarea::placeholder { color: color-mix(in srgb, var(--grey) 60%, var(--paper))
 .ai-changes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .ai-change { display: flex; align-items: baseline; gap: 10px; min-width: 0; font-size: 14px; line-height: 24px; }
 .ai-mark { flex: 0 0 16px; font-family: var(--mono); font-size: 12px; text-align: center; color: var(--grey); }
-.ai-change[data-kind='done'] .ai-mark { background: var(--green); color: var(--ink); border-radius: 3px; line-height: 16px; }
+.ai-change[data-kind='done'] .ai-mark { background: var(--green); color: var(--on-green); border-radius: 3px; line-height: 16px; }
 .ai-change[data-kind='remove'] .ai-text { text-decoration: line-through; color: var(--grey); }
 .ai-text { min-width: 0; overflow-wrap: anywhere; }
 .ai-detail { flex-shrink: 0; margin-left: auto; font-family: var(--mono); font-size: 12px; color: var(--grey); }
@@ -744,7 +760,7 @@ kbd {
   background: var(--paper);
   border: 1px solid var(--rule);
   border-radius: 8px;
-  box-shadow: 0 12px 32px -12px color-mix(in srgb, var(--ink) 25%, transparent);
+  box-shadow: 0 12px 32px -12px color-mix(in srgb, var(--shade) 25%, transparent);
   overflow: hidden;
   animation: qa-in 140ms var(--ease);
 }
@@ -787,35 +803,7 @@ kbd {
   .top { grid-template-columns: auto auto; }
   .brand { display: none; }
   .view-toggle { justify-self: start; }
-  .prio {
-  flex: 0 0 auto;
-  font-family: var(--mono);
-  font-weight: 600;
-  font-size: 13px;
-  color: var(--ink);
-}
-.line .prio { margin-right: -4px; }
-
-.due {
-  flex: 0 0 auto;
-  height: 18px;
-  margin-top: 3px;
-  padding: 0 6px;
-  border-radius: 4px;
-  font-family: var(--mono);
-  font-weight: 500;
-  font-size: 10px;
-  line-height: 18px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  color: var(--grey);
-}
-.due[data-when='today'] { color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
-.due[data-when='overdue'] { color: var(--paper); background: var(--ink); }
-.card-meta .due { margin-top: 0; }
-
-.context { display: none; }
+  .context { display: none; }
   .app[data-view='board'] .sheet { padding-right: 16px; }
   .board { grid-template-columns: 1fr; gap: 28px; margin-left: 16px; }
   .column { min-height: 0; }

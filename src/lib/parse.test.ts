@@ -11,6 +11,7 @@ describe('parseTask', () => {
       tags: ['zimvie'],
       priority: true,
       due: '2026-09-29',
+      repeat: null,
     })
   })
 

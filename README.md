@@ -23,7 +23,9 @@ Al pulsar Enter (o salir de la línea), el texto se interpreta:
 - `!` como palabra suelta marca la tarea como prioritaria.
 - Una fecha al final de la línea la planifica: `hoy`, `mañana`, `pasado mañana`, un día de la semana (`viernes`) o `3/10`. En mitad de la frase, con `@` (`Revisar @lunes la oferta`). Sin `@`, solo se lee al final, así que «Informe de mañana para Ana» se queda como está.
 
-`Llamar a IT mañana #zimvie !` → «Llamar a IT», para mañana, con `#zimvie` y prioridad.
+- Una repetición al final la hace recurrente: `cada día`, `todos los días`, `entre semana`, `cada semana`, `cada lunes`, `cada mes`. Al completarla aparece justo debajo la siguiente, con su fecha y sus subtareas otra vez abiertas; la fecha lleva un `↻`. En el menú `/`: «Quitar repetición», o escribe «repetir» para añadirla.
+
+`Llamar a IT mañana #zimvie !` → «Llamar a IT», para mañana, con `#zimvie` y prioridad. `Standup cada día #equipo` → se repite cada día desde hoy.
 
 **Pegar una lista** (varias líneas) crea una tarea por línea. La sangría, las viñetas `-` `*` `1.`, los `├─ │ └─` y las casillas `[ ]` `[x]` `☐` `☑` se respetan: pegar un árbol crea el árbol.
 
@@ -63,6 +65,10 @@ npm run dev
 Sin clave, la app funciona igual y las acciones de IA no aparecen. `AI_MODEL` cambia el modelo (por defecto `anthropic/claude-haiku-4-5`; también vale `openai/...` o `google/...` con su clave).
 
 **Cómo está hecho**: [CopilotKit](https://github.com/CopilotKit/CopilotKit) v2 sin su UI de chat. En el navegador, `src/ai/` usa el núcleo de CopilotKit (cargado solo al primer uso) con una herramienta de frontend, `propose_changes`, cuyas operaciones (`add`, `update`, `move`, `remove`) se aplican con las mismas funciones del árbol que usa el teclado (`src/ai/ops.ts`). En el servidor, `server/ai.ts` es el runtime de CopilotKit con un `BuiltInAgent` obligado a responder siempre con esa herramienta; Vite lo sirve en `/api/ai` en `dev` y `preview`. Para publicarlo fuera de local, `createAiHandler()` devuelve un handler Fetch estándar que corre en Cloudflare Workers, Vercel, Netlify, Deno o Bun; si vive en otro dominio, `VITE_AI_URL` apunta la app a él.
+
+**App instalable y sin conexión**: la versión compilada (`npm run build`) se puede instalar desde el navegador y abre sin red; los datos ya viven en el propio navegador.
+
+**Modo oscuro**: sigue al del sistema, sin ajustes.
 
 ## Teclado
 
@@ -119,6 +125,7 @@ La vista, el orden y los filtros se recuerdan en cada navegador.
 - `src/lib/backup.ts`: exportar e importar JSON.
 - `src/lib/organize.ts`: ordenar, agrupar y filtrar (puro, con tests).
 - `src/lib/daily.ts`: día nuevo (tareas arrastradas y su edad) y resumen en Markdown.
+- `src/lib/repeat.ts`: tareas recurrentes (gramática, siguiente fecha y la copia al completar).
 - `src/lib/templates.ts`: plantillas guardadas.
 - `src/lib/prefs.ts`: vista, orden y filtros recordados por navegador.
 - `src/components/`: `ListView` y `TaskRow` (folio), `BoardView` (kanban), `Toolbar`, el menú `/`, `QuickCapture` y `SearchBar`.
