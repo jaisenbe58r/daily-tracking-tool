@@ -60,7 +60,7 @@ describe('candidatesFromEvents', () => {
 })
 
 describe('finish', () => {
-  it('turns the cited source into a link and dates invitations', () => {
+  it('turns the cited source into the task link and dates invitations', () => {
     const cands = candidatesFromEvents(
       [{ id: 'e1', summary: 'Kick-off', htmlLink: 'https://www.google.com/calendar/event?eid=1', start: { dateTime: '2026-10-01T09:00:00+02:00' }, organizer: { email: 'jefe@captia.com' }, attendees: [{ self: true, responseStatus: 'needsAction' }] }],
       me,
@@ -74,8 +74,8 @@ describe('finish', () => {
       cands,
     )
     expect(ops).toEqual([
-      { op: 'add', text: 'Responder invitación: Kick-off', notes: 'Google Calendar · Kick-off\nhttps://www.google.com/calendar/event?eid=1', due: '2026-10-01' },
-      { op: 'add', text: 'Sin origen', notes: '', due: null },
+      { op: 'add', text: 'Responder invitación: Kick-off', parent: null, tags: [], due: '2026-10-01', source: { app: 'calendar', url: 'https://www.google.com/calendar/event?eid=1' } },
+      { op: 'add', text: 'Sin origen', parent: null, tags: [], due: null },
     ])
   })
 })

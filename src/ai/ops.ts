@@ -1,4 +1,4 @@
-import type { Status, Task } from '../lib/types'
+import type { Source, Status, Task } from '../lib/types'
 import * as tree from '../lib/tree'
 import { dateKey } from '../lib/parse'
 import { plantNext } from '../lib/repeat'
@@ -19,6 +19,8 @@ export interface Op {
   due?: string | null
   priority?: boolean
   status?: Status
+  /** Set by the app, never by the model: the mail or event an added task came from. */
+  source?: Source
 }
 
 export interface Proposal {
@@ -119,13 +121,15 @@ export function applyOps(
         tags: cleanTags(op.tags ?? []),
         due: validDue(op.due),
         priority: op.priority ?? false,
+        ...(op.source ? { source: op.source } : {}),
       }
       if (op.status) task = { ...task, ...withStatus(task, op.status) }
       out = tree.place(parentId ? tree.update(out, parentId, { collapsed: false }) : out, task, parentId, null)
       if (op.ref) ids.set(op.ref.trim(), task.id)
       const depth = parentId && depthOf.has(parentId) ? depthOf.get(parentId)! + 1 : 0
       depthOf.set(task.id, depth)
-      const detail = [task.tags.map((t) => `#${t}`).join(' '), task.due ?? '', task.priority ? '!' : ''].filter(Boolean).join(' ')
+      const from = task.source ? (task.source.app === 'gmail' ? 'gmail' : 'agenda') : ''
+      const detail = [task.tags.map((t) => `#${t}`).join(' '), task.due ?? '', task.priority ? '!' : '', from].filter(Boolean).join(' ')
       changes.push({ kind: 'add', text, depth, detail })
       continue
     }

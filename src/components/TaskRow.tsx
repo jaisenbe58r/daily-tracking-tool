@@ -253,6 +253,21 @@ function TaskRowImpl({ row, focus, dragging, dispatch, onOpenActions, onDragStar
               </svg>
             </button>
           )}
+          {task.source && (
+            <a
+              className="source"
+              href={task.source.url}
+              target="_blank"
+              rel="noopener"
+              tabIndex={-1}
+              title={`Abrir en ${task.source.app === 'gmail' ? 'Gmail' : 'Google Calendar'} (${isMac ? '⌥' : 'Alt+'}O)`}
+            >
+              {task.source.app === 'gmail' ? 'Gmail' : 'Agenda'}
+              <svg width="8" height="8" viewBox="0 0 8 8" aria-hidden>
+                <path d="M2 6l4-4M3 2h3v3" fill="none" stroke="currentColor" strokeWidth="1.1" />
+              </svg>
+            </a>
+          )}
           <time
             className="date"
             data-stale={stale || undefined}

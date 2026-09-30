@@ -37,8 +37,6 @@ const SUMMARY_REQUEST =
   'Redacta el resumen de mi día para compartirlo con el equipo: qué he cerrado, qué sigue en curso y qué queda para mañana. Breve, en frases, sin inventar nada.'
 
 const RECOGER = 'Recoger del correo y la agenda'
-/** The link a task brought from its source (Gmail, Calendar), kept in its notes. */
-const sourceUrl = (notes: string) => notes.match(/https:\/\/(mail|calendar|www)\.google\.com\/\S+/)?.[0] ?? null
 
 const todayFmt = new Intl.DateTimeFormat('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })
 
@@ -252,7 +250,7 @@ export default function App() {
   /** Alt+O: opens the mail or event a task came from. A real link, so it works inside claude.ai too. */
   const openSource = useCallback(() => {
     const id = activeTaskId()
-    const url = sourceUrl(latest.current.tasks.find((t) => t.id === id)?.notes ?? '')
+    const url = latest.current.tasks.find((t) => t.id === id)?.source?.url
     if (!url) return false
     const a = document.createElement('a')
     a.href = url
@@ -270,7 +268,7 @@ export default function App() {
         ...(inbox.available
           ? [{ label: RECOGER, hint: `${A}I`, keywords: 'ia ai correo gmail email agenda calendario calendar recoger bandeja invitaciones', run: () => void recoger() }]
           : []),
-        ...(sourceUrl(task?.notes ?? '')
+        ...(task?.source
           ? [{ label: 'Abrir el correo o evento de origen', hint: `${A}O`, keywords: 'abrir origen correo gmail evento calendario', run: () => {
               dispatch({ type: 'focus', id: taskId })
               requestAnimationFrame(() => openSource())

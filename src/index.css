@@ -873,3 +873,25 @@ kbd {
 .inbox-chip:focus-visible { outline: 1px solid var(--ink); outline-offset: 3px; }
 @keyframes inbox-in { from { transform: scale(0); } to { transform: scale(1); } }
 @media (prefers-reduced-motion: reduce) { .inbox-chip::before { animation: none; } }
+
+/* Where a task came from (Recoger): one quiet word, a real link, ink on hover. */
+.source {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 10px 0 0;
+  font-family: var(--mono);
+  font-weight: 500;
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--grey);
+  text-decoration: none;
+  opacity: 0.6;
+  transition: opacity 120ms, color 120ms;
+}
+.row:hover .source, .row:focus-within .source { opacity: 1; }
+.source:hover { color: var(--ink); }
+.source:focus-visible { outline: 1px solid var(--ink); outline-offset: 2px; opacity: 1; }
+.row[data-status='done'] .source { opacity: 0.35; }
