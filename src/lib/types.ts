@@ -20,6 +20,13 @@ export interface Task {
   priority: boolean
   /** Recurring task: completing it plants the next occurrence right below. */
   repeat: Repeat | null
+  /** Where the task came from (Recoger): the mail or event it opens. */
+  source?: Source | null
+}
+
+export interface Source {
+  app: 'gmail' | 'calendar'
+  url: string
 }
 
 /** `weekly` keeps the weekday of its date; `monthly` its day of the month. */

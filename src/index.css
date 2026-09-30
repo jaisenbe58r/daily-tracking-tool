@@ -853,3 +853,45 @@ kbd {
   .capture-act, .capture-ai, .search-ai { min-height: 36px; }
   .capture-mic { flex-basis: 36px; height: 36px; }
 }
+
+/* Recoger: tasks found in mail and calendar, waiting in the header until opened (Alt+I). */
+.inbox-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: var(--ink);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.inbox-chip::before { content: ''; width: 6px; height: 6px; background: var(--ink); border-radius: 50%; animation: inbox-in 0.4s ease-out; }
+.inbox-chip:hover { text-decoration: underline; text-underline-offset: 3px; }
+.inbox-chip:focus-visible { outline: 1px solid var(--ink); outline-offset: 3px; }
+@keyframes inbox-in { from { transform: scale(0); } to { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .inbox-chip::before { animation: none; } }
+
+/* Where a task came from (Recoger): one quiet word, a real link, ink on hover. */
+.source {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 10px 0 0;
+  font-family: var(--mono);
+  font-weight: 500;
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--grey);
+  text-decoration: none;
+  opacity: 0.6;
+  transition: opacity 120ms, color 120ms;
+}
+.row:hover .source, .row:focus-within .source { opacity: 1; }
+.source:hover { color: var(--ink); }
+.source:focus-visible { outline: 1px solid var(--ink); outline-offset: 2px; opacity: 1; }
+.row[data-status='done'] .source { opacity: 0.35; }

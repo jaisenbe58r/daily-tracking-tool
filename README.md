@@ -60,7 +60,9 @@ Las propuestas se van dibujando mientras llegan. En pantallas táctiles, «IA»,
 
 **Dictado**: donde el navegador lo permite (Chrome, Edge, Safari), la línea de `Cmd/Ctrl+K` tiene un micrófono (`Alt+V`). Usa el reconocimiento de voz del propio navegador, no la IA, y funciona aunque no haya clave.
 
-Solo se envía algo al modelo cuando lo pides: tu petición y una lista compacta de las tareas (texto, estado, tags, fecha). Nada en segundo plano.
+**Recoger del correo y la agenda** (`Alt+I`, o `/` → Recoger): dentro de claude.ai, la app lee tu Gmail y tu Google Calendar con tus propios conectores de claude.ai y propone como tareas todo lo que te toca de forma clara, sin límite: correos que te escriben a ti (no en copia) y aún no has contestado, hilos destacados, correos tuyos de hace 2 a 10 días que siguen sin respuesta y reuniones de la próxima semana con la invitación sin responder. Se ven como cualquier otra propuesta: `Enter` las añade, `Esc` las descarta, `Cmd/Ctrl+Z` deshace. Cada tarea guarda en la nota el enlace a su correo o evento; `Alt+O` lo abre. Al abrir la página y cada 15 minutos mientras está a la vista, la app vuelve a mirar y la cabecera avisa («3 tareas en tu correo»); no se añade nada hasta que lo abres. Lo que ya viste no vuelve a proponerse, salvo que el hilo reciba una respuesta nueva. Solo lectura: la app no puede enviar, borrar ni responder invitaciones.
+
+Al modelo solo le llega tu petición y una lista compacta de las tareas (texto, estado, tags, fecha). Con Recoger, además, el último mensaje (recortado, sin el historial citado) de los hilos que pasan los filtros, y el título de las invitaciones pendientes. Lo único que corre en segundo plano es Recoger.
 
 **Cómo se activa**: la app elige sola la primera vía que funcione.
 
@@ -72,7 +74,7 @@ Solo se envía algo al modelo cuando lo pides: tu petición y una lista compacta
    ```
 
    `AI_MODEL` cambia el modelo (por defecto `anthropic/claude-haiku-4-5`; también vale `openai/...` o `google/...` con su clave).
-2. **Dentro de claude.ai** (la vista previa publicada como artifact): usa Claude con tu propia cuenta. No hace falta clave; claude.ai te pide permiso la primera vez.
+2. **Dentro de claude.ai** (la vista previa publicada como artifact): usa Claude con tu propia cuenta. No hace falta clave; claude.ai te pide permiso la primera vez. Para Recoger, el artifact se publica con las capacidades `sample` y `mcp` (conectores `Gmail`: `search_threads`, `get_thread`; `Google Calendar`: `list_events`), y claude.ai pide permiso una vez por conector.
 3. **Clave en el navegador** (una copia local o en un hosting estático, sin servidor): la primera vez que pides algo a la IA, la línea te pide tu clave de Anthropic. Se guarda solo en ese navegador (`localStorage`) y el navegador llama directamente a Anthropic. En `/`, «Olvidar la clave de la IA» la borra. `VITE_AI_MODEL` cambia el modelo (por defecto `claude-haiku-4-5`).
 
 Sin ninguna de las tres, la app funciona igual.
@@ -98,6 +100,8 @@ Sin ninguna de las tres, la app funciona igual.
 | `Cmd/Ctrl+Z` · `Cmd/Ctrl+Shift+Z` | Deshacer · rehacer (texto y estructura) |
 | `Alt+H` | Planificar para hoy (o quitarlo) |
 | `Alt+T` | Vista Hoy |
+| `Alt+I` | Recoger tareas del correo y la agenda (dentro de claude.ai) |
+| `Alt+O` | Abrir el correo o evento del que salió la tarea |
 | `Cmd/Ctrl+K` | Captura global |
 | `Cmd/Ctrl+F` | Buscar |
 | `Alt+F` | Modo foco en la tarea actual |
