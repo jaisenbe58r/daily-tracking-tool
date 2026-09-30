@@ -119,6 +119,26 @@ export function useAi(tasks: Task[], today: string) {
     return idsFor(snap.refs, ids)
   }, [])
 
+  /**
+   * A proposal worked out elsewhere (Recoger, in the background), shown like any
+   * other: applied on top of the sheet as it is now. `refs` are the sheet's refs
+   * when the model read it, so parents still resolve if rows moved since.
+   * Without `found`, just the waiting state while it's being worked out.
+   */
+  const present = useCallback((request: string, found?: { summary: string; ops: Op[]; refs: Map<string, string> }) => {
+    controller.current?.abort()
+    controller.current = null
+    if (!found) {
+      setJob({ phase: 'thinking', request })
+      return
+    }
+    const base = latest.current.tasks
+    const { tasks: next, changes } = applyOps(base, found.ops, found.refs, latest.current.today)
+    setJob({ phase: 'proposal', request, summary: found.summary, changes, next, base })
+  }, [])
+
+  const fail = useCallback((request: string, error: unknown) => setJob({ phase: 'error', request, message: message(error) }), [])
+
   const cancel = useCallback(() => {
     controller.current?.abort()
     controller.current = null
@@ -141,5 +161,5 @@ export function useAi(tasks: Task[], today: string) {
     setHasKey(false)
   }, [])
 
-  return { available: mode !== null, mode, hasKey, job, ask, write, search, cancel, saveKey, forgetKey }
+  return { available: mode !== null, mode, hasKey, job, ask, write, search, present, fail, cancel, saveKey, forgetKey }
 }

@@ -853,3 +853,23 @@ kbd {
   .capture-act, .capture-ai, .search-ai { min-height: 36px; }
   .capture-mic { flex-basis: 36px; height: 36px; }
 }
+
+/* Recoger: tasks found in mail and calendar, waiting in the header until opened (Alt+I). */
+.inbox-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: var(--ink);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.inbox-chip::before { content: ''; width: 6px; height: 6px; background: var(--ink); border-radius: 50%; animation: inbox-in 0.4s ease-out; }
+.inbox-chip:hover { text-decoration: underline; text-underline-offset: 3px; }
+.inbox-chip:focus-visible { outline: 1px solid var(--ink); outline-offset: 3px; }
+@keyframes inbox-in { from { transform: scale(0); } to { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .inbox-chip::before { animation: none; } }

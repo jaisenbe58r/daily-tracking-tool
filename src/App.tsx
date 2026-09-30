@@ -15,6 +15,7 @@ import { dailySummary, subtreeOutline } from './lib/daily'
 import { useTemplates } from './lib/templates'
 import { descendantIds } from './lib/tree'
 import { useAi } from './ai/useAi'
+import { useInbox } from './ai/inbox/useInbox'
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
 const M = isMac ? '⌘' : 'Ctrl '
@@ -34,6 +35,10 @@ const PLAN_REQUEST =
   'Planifica mi día: elige como máximo 3 tareas abiertas que más importen hoy (vencidas, arrastradas, en curso o prioritarias) y ponles fecha de hoy y prioridad. No toques el resto.'
 const SUMMARY_REQUEST =
   'Redacta el resumen de mi día para compartirlo con el equipo: qué he cerrado, qué sigue en curso y qué queda para mañana. Breve, en frases, sin inventar nada.'
+
+const RECOGER = 'Recoger del correo y la agenda'
+/** The link a task brought from its source (Gmail, Calendar), kept in its notes. */
+const sourceUrl = (notes: string) => notes.match(/https:\/\/(mail|calendar|www)\.google\.com\/\S+/)?.[0] ?? null
 
 const todayFmt = new Intl.DateTimeFormat('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })
 
@@ -60,6 +65,7 @@ export default function App() {
   const todayKey = dateKey(today)
   const ai = useAi(state.tasks, todayKey)
   const { mode: aiMode, hasKey: aiHasKey, forgetKey } = ai
+  const inbox = useInbox(ai.mode, state.tasks, todayKey)
   const aiReady = useRef(false)
   useEffect(() => {
     aiReady.current = ai.available
@@ -170,6 +176,8 @@ export default function App() {
 
   // Capture (Cmd/Ctrl+K) hands focus back to where the user was typing.
   const returnTo = useRef<HTMLElement | null>(null)
+  /** Bumped whenever the capture line closes, so a late answer doesn't reopen it. */
+  const captureRun = useRef(0)
   const restoreFocus = () =>
     requestAnimationFrame(() => {
       // Only if nothing else claimed focus in the meantime (e.g. ⌘F right after Esc).
@@ -178,6 +186,7 @@ export default function App() {
     })
 
   const closeCapture = () => {
+    captureRun.current++
     if (!returnTo.current && seed.taskId && state.tasks.some((t) => t.id === seed.taskId)) dispatch({ type: 'focus', id: seed.taskId })
     else restoreFocus()
   }
@@ -210,11 +219,63 @@ export default function App() {
     [openAi],
   )
 
+  const { present, fail, cancel: cancelAi } = ai
+  const { take, clear } = inbox
+  /** Alt+I: the tasks found in mail and calendar, as a proposal to accept (Enter) or drop (Esc). */
+  const recoger = useCallback(async () => {
+    const run = ++captureRun.current
+    returnTo.current = document.activeElement as HTMLElement | null
+    setSeed({ taskId: null, text: RECOGER, mode: 'changes' })
+    setCapturing(true)
+    present(RECOGER)
+    try {
+      const got = await take()
+      if (run !== captureRun.current) return // closed meanwhile: what was found keeps waiting in the header
+      if ('found' in got) {
+        present(RECOGER, got.found)
+        clear(got.found)
+      } else {
+        cancelAi()
+        setCapturing(false)
+        restoreFocus()
+        notify(got.problem ?? 'Nada nuevo en tu correo ni en tu agenda')
+      }
+    } catch (error) {
+      if (run === captureRun.current) fail(RECOGER, error)
+    }
+  }, [present, take, clear, cancelAi, fail, notify])
+  const recogerReady = useRef(false)
+  useEffect(() => {
+    recogerReady.current = inbox.available
+  }, [inbox.available])
+
+  /** Alt+O: opens the mail or event a task came from. A real link, so it works inside claude.ai too. */
+  const openSource = useCallback(() => {
+    const id = activeTaskId()
+    const url = sourceUrl(latest.current.tasks.find((t) => t.id === id)?.notes ?? '')
+    if (!url) return false
+    const a = document.createElement('a')
+    a.href = url
+    a.target = '_blank'
+    a.rel = 'noopener'
+    a.click()
+    return true
+  }, [])
+
   const extraActions = useCallback(
     (taskId: string): QuickItem[] => {
       const task = state.tasks.find((t) => t.id === taskId)
       const name = task?.text.trim()
       return [
+        ...(inbox.available
+          ? [{ label: RECOGER, hint: `${A}I`, keywords: 'ia ai correo gmail email agenda calendario calendar recoger bandeja invitaciones', run: () => void recoger() }]
+          : []),
+        ...(sourceUrl(task?.notes ?? '')
+          ? [{ label: 'Abrir el correo o evento de origen', hint: `${A}O`, keywords: 'abrir origen correo gmail evento calendario', run: () => {
+              dispatch({ type: 'focus', id: taskId })
+              requestAnimationFrame(() => openSource())
+            } }]
+          : []),
         ...(ai.available
           ? [
               ...(name
@@ -262,7 +323,7 @@ export default function App() {
         { label: 'Importar copia', hint: `${M}O`, keywords: 'backup json abrir cargar restaurar', run: openImport },
       ]
     },
-    [state.tasks, templates, focusId, toggleFocusMode, saveTemplate, removeTemplate, notify, dispatch, copySummary, exportAll, openImport, ai.available, aiMode, aiHasKey, forgetKey, openAi, planDay, writeSummary],
+    [state.tasks, templates, focusId, toggleFocusMode, saveTemplate, removeTemplate, notify, dispatch, copySummary, exportAll, openImport, ai.available, aiMode, aiHasKey, forgetKey, openAi, planDay, writeSummary, inbox.available, recoger, openSource],
   )
 
   const setView = useCallback((v: View) => setPrefs((p) => ({ ...p, view: v })), [setPrefs])
@@ -316,6 +377,11 @@ export default function App() {
       } else if (e.altKey && e.code === 'KeyP' && aiReady.current) {
         e.preventDefault()
         planDay(activeTaskId())
+      } else if (e.altKey && e.code === 'KeyI' && recogerReady.current) {
+        e.preventDefault()
+        void recoger()
+      } else if (e.altKey && e.code === 'KeyO') {
+        if (openSource()) e.preventDefault()
       }
     }
     // Dropping a backup file anywhere on the page imports it.
@@ -336,7 +402,7 @@ export default function App() {
       window.removeEventListener('dragover', onDragOver)
       window.removeEventListener('drop', onDrop)
     }
-  }, [dispatch, setView, setPrefs, exportAll, openImport, importFile, toggleFocusMode, copySummary, planDay, writeSummary])
+  }, [dispatch, setView, setPrefs, exportAll, openImport, importFile, toggleFocusMode, copySummary, planDay, writeSummary, recoger, openSource])
 
   // Keep the heading right when the tab stays open past midnight.
   useEffect(() => {
@@ -366,6 +432,14 @@ export default function App() {
             ))}
           </div>
           <div className="counts" aria-live="polite" title={`${plural(open, 'pendiente')} · ${plural(done, 'hecha')}`}>
+            {inbox.count > 0 && (
+              <>
+                <button className="inbox-chip" title={`${RECOGER} (${isMac ? '⌥' : 'Alt+'}I)`} onClick={() => void recoger()}>
+                  {inbox.count}<span className="word"> {inbox.count === 1 ? 'tarea' : 'tareas'} en tu correo</span>
+                </button>
+                <span className="sep" />
+              </>
+            )}
             <span>{open}<span className="word"> {open === 1 ? 'pendiente' : 'pendientes'}</span></span>
             <span className="sep" />
             <span>{done}<span className="word"> {done === 1 ? 'hecha' : 'hechas'}</span></span>
