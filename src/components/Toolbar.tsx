@@ -1,5 +1,8 @@
 import type { View } from '../lib/prefs'
 import type { Filters, SortMode } from '../lib/types'
+import { useNotice } from '../lib/teach'
+
+const A = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌥' : 'Alt+'
 
 const SORTS: { mode: SortMode; label: string }[] = [
   { mode: 'manual', label: 'Manual' },
@@ -18,10 +21,17 @@ interface Props {
   /** Name of the task in focus mode, if any. */
   focusName: string | null
   onExitFocus: () => void
+  /** Open tasks planned for today or overdue. */
+  leftToday: number
+  /** Tasks postponed to a later day, and whether they're shown anyway. */
+  snoozed: number
+  showSnoozed: boolean
+  onShowSnoozed: () => void
 }
 
 /** Deliberately quiet: small mono labels that only turn ink when active. */
-export function Toolbar({ view, sort, filters, tags, onSort, onFilters, focusName, onExitFocus }: Props) {
+export function Toolbar({ view, sort, filters, tags, onSort, onFilters, focusName, onExitFocus, leftToday, snoozed, showSnoozed, onShowSnoozed }: Props) {
+  const { teach } = useNotice()
   return (
     <div className="toolbar">
       {view === 'list' && (
@@ -37,17 +47,28 @@ export function Toolbar({ view, sort, filters, tags, onSort, onFilters, focusNam
 
       <div className="tool">
         {focusName !== null && (
-          <button aria-pressed title="Salir del modo foco (Alt+F)" className="focus-chip" onClick={onExitFocus}>
+          <button aria-pressed title="Salir del modo foco (Alt+F)" className="focus-chip" onClick={(e) => {
+            onExitFocus()
+            if (e.detail > 0) teach('focus', `${A}F`)
+          }}>
             Foco · {focusName || 'Sin título'} ×
           </button>
         )}
         <button
           aria-pressed={filters.today}
-          title="Solo lo planificado para hoy o vencido (Alt+T)"
-          onClick={() => onFilters({ ...filters, today: !filters.today })}
+          title={`Solo lo planificado para hoy o vencido (${A}T)${leftToday ? ` · quedan ${leftToday}` : ''}`}
+          onClick={(e) => {
+            onFilters({ ...filters, today: !filters.today })
+            if (e.detail > 0) teach('today', `${A}T`)
+          }}
         >
-          Hoy
+          Hoy{leftToday > 0 && <span className="count">{leftToday}</span>}
         </button>
+        {snoozed > 0 && (
+          <button aria-pressed={showSnoozed} title={`${showSnoozed ? 'Ocultar' : 'Ver'} lo pospuesto (${A}L sobre una tarea la pospone o la devuelve)`} onClick={onShowSnoozed}>
+            {snoozed} {snoozed === 1 ? 'pospuesta' : 'pospuestas'}
+          </button>
+        )}
         {view === 'list' && (
           <button aria-pressed={filters.hideDone} onClick={() => onFilters({ ...filters, hideDone: !filters.hideDone })}>
             Ocultar hechas

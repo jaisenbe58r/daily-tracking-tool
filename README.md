@@ -39,6 +39,14 @@ Al pulsar Enter (o salir de la línea), el texto se interpreta:
 
 **Día nuevo**: la primera vez que abres la hoja cada día, lo que quedó abierto de días anteriores sube arriba, y su fecha se cambia por la edad (`3 d`) para que se note lo que se arrastra.
 
+**Posponer** (`Alt+L` sobre una tarea, o `/` → «Posponer…»): elige un día (`Mañana`, `El lunes`…) o escríbelo (`viernes`, `15/10`, `3 días`, `2 semanas`). La tarea sale de la hoja y del Board, con sus subtareas, y ese día vuelve arriba con `↩ 3 d` (los días que estuvo fuera). No es lo mismo que planificar: la fecha dice para cuándo; posponer dice que no quieres verla hasta entonces. Arriba, «2 pospuestas» las enseña; `Alt+L` sobre una pospuesta la devuelve ya.
+
+**Esperando** (`/` → «Esperando…»): para lo que depende de otra persona. Pospone la tarea (por defecto tres días laborables) y le pone `#esperando`. Si sigue abierta ese día, vuelve con `sin respuesta · 3 d` para que la persigas.
+
+**Hoy a cero**: junto a «Hoy», un número pequeño dice lo que queda para hoy. Al cerrar la última, un aviso verde lo celebra y recuerda `Alt+R`.
+
+**Los atajos se enseñan solos**: si haces con el ratón o desde `/` algo que tiene tecla, un aviso breve te la dice. Solo las tres primeras veces de cada acción.
+
 **Resumen del día** (`Alt+R`): copia al portapapeles un Markdown con lo hecho hoy (con su proyecto) y lo que está en curso, listo para pegar en un chat o un correo.
 
 **Plantillas**: en `/`, «Guardar como plantilla» guarda la tarea con sus subtareas; luego «Plantilla · nombre» la inserta (sin estados ni fechas). Para borrar una, escribe «borrar» en el menú. Las plantillas viajan en la copia JSON.
@@ -84,6 +92,7 @@ Sin clave, la app funciona igual y las acciones de IA no aparecen. `AI_MODEL` ca
 | `Backspace` en una tarea vacía | Borrarla |
 | `Cmd/Ctrl+Z` · `Cmd/Ctrl+Shift+Z` | Deshacer · rehacer (texto y estructura) |
 | `Alt+H` | Planificar para hoy (o quitarlo) |
+| `Alt+L` | Posponer (o devolver una pospuesta) |
 | `Alt+T` | Vista Hoy |
 | `Cmd/Ctrl+K` | Captura global |
 | `Cmd/Ctrl+F` | Buscar |
@@ -125,6 +134,8 @@ La vista, el orden y los filtros se recuerdan en cada navegador.
 - `src/lib/daily.ts`: día nuevo (tareas arrastradas y su edad) y resumen en Markdown.
 - `src/lib/repeat.ts`: tareas recurrentes (gramática, siguiente fecha y la copia al completar).
 - `src/lib/templates.ts`: plantillas guardadas.
+- `src/lib/snooze.ts`: posponer y esperando (fechas, ocultar, volver al día siguiente).
+- `src/lib/teach.ts`: avisos y los atajos que se enseñan solos.
 - `src/lib/prefs.ts`: vista, orden y filtros recordados por navegador.
 - `src/components/`: `ListView` y `TaskRow` (folio), `BoardView` (kanban), `Toolbar`, el menú `/`, `QuickCapture` y `SearchBar`.
 
