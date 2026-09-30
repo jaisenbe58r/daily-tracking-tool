@@ -65,8 +65,8 @@ export function useAi(tasks: Task[], today: string) {
     return ctrl
   }
 
-  /** Changes to the sheet: capture, commands, /split, /plan. */
-  const ask = useCallback(async function ask(request: string, selectedId: string | null = null) {
+  /** Changes to the sheet: capture, commands, /split, /plan. `extra` adds context the sheet alone doesn't say. */
+  const ask = useCallback(async function ask(request: string, selectedId: string | null = null, extra = '') {
     const ctrl = begin()
     const base = latest.current.tasks
     const snap = snapshot(base, latest.current.today, selectedId)
@@ -76,7 +76,7 @@ export function useAi(tasks: Task[], today: string) {
       const proposal = await run(modeRef.current, {
         tool: 'propose_changes',
         request,
-        context: snap.text,
+        context: extra ? `${snap.text}\n\n${extra}` : snap.text,
         signal: ctrl.signal,
         onPartial: (partial) => {
           const changes = applyOps(base, settled(partial.ops), snap.refs, latest.current.today).changes
@@ -87,14 +87,17 @@ export function useAi(tasks: Task[], today: string) {
       const { tasks: next, changes } = applyOps(base, proposal.ops, snap.refs, latest.current.today)
       setJob({ phase: 'proposal', request, summary: proposal.summary, changes, next, base })
     } catch (error) {
-      if (!ctrl.signal.aborted) failed(request, error, () => void ask(request, selectedId))
+      if (!ctrl.signal.aborted) failed(request, error, () => void ask(request, selectedId, extra))
     }
   }, [])
 
-  /** Prose for the user (the day's summary). `extra` adds context the sheet alone doesn't say. */
-  const write = useCallback(async function write(request: string, extra = '') {
+  /**
+   * Prose for the user (the day's summary, a draft). `extra` adds context the sheet alone doesn't say;
+   * `onText` gets the finished text (drafts are kept for next time).
+   */
+  const write = useCallback(async function write(request: string, extra = '', selectedId: string | null = null, onText?: (text: string) => void) {
     const ctrl = begin()
-    const snap = snapshot(latest.current.tasks, latest.current.today)
+    const snap = snapshot(latest.current.tasks, latest.current.today, selectedId)
     setJob({ phase: 'thinking', request })
     try {
       const { ask: run } = await import('./client')
@@ -105,9 +108,11 @@ export function useAi(tasks: Task[], today: string) {
         signal: ctrl.signal,
         onPartial: (partial) => partial.text && setJob({ phase: 'thinking', request, text: partial.text }),
       })
-      if (!ctrl.signal.aborted) setJob({ phase: 'text', request, text })
+      if (ctrl.signal.aborted) return
+      onText?.(text)
+      setJob({ phase: 'text', request, text })
     } catch (error) {
-      if (!ctrl.signal.aborted) failed(request, error, () => void write(request, extra))
+      if (!ctrl.signal.aborted) failed(request, error, () => void write(request, extra, selectedId, onText))
     }
   }, [])
 
@@ -137,6 +142,13 @@ export function useAi(tasks: Task[], today: string) {
     setJob({ phase: 'proposal', request, summary: found.summary, changes, next, base })
   }, [])
 
+  /** Text worked out earlier (a kept draft), shown like a fresh answer. */
+  const showText = useCallback((request: string, text: string) => {
+    controller.current?.abort()
+    controller.current = null
+    setJob({ phase: 'text', request, text })
+  }, [])
+
   const fail = useCallback((request: string, error: unknown) => setJob({ phase: 'error', request, message: message(error) }), [])
 
   const cancel = useCallback(() => {
@@ -161,5 +173,5 @@ export function useAi(tasks: Task[], today: string) {
     setHasKey(false)
   }, [])
 
-  return { available: mode !== null, mode, hasKey, job, ask, write, search, present, fail, cancel, saveKey, forgetKey }
+  return { available: mode !== null, mode, hasKey, job, ask, write, search, present, showText, fail, cancel, saveKey, forgetKey }
 }

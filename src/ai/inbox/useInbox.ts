@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Task } from '../../lib/types'
 import type { AiMode } from '../config'
 import { markSeen, isSeen } from './seen'
+import { watchedTasks } from './sources'
 import type { Found } from './extract'
 
 /** How often the mail and calendar are read again while the page is in view. */
@@ -48,7 +49,7 @@ export function useInbox(mode: AiMode | null, tasks: Task[], today: string) {
     if (running.current) return running.current
     const run = (async () => {
       const { gather } = await import('./connectors')
-      const gathered = await gather(isSeen)
+      const gathered = await gather(isSeen, watchedTasks(latest.current.tasks))
       checkedAt.current = Date.now()
       if (!gathered) return
       const { candidates, problems } = gathered
@@ -100,7 +101,7 @@ export function useInbox(mode: AiMode | null, tasks: Task[], today: string) {
     if (running.current) await running.current
     else if (!latest.current.found && Date.now() - checkedAt.current > FRESH_MS) {
       const { gather } = await import('./connectors')
-      const gathered = await gather(isSeen)
+      const gathered = await gather(isSeen, watchedTasks(latest.current.tasks))
       checkedAt.current = Date.now()
       if (!gathered) return { none: true, problem: 'Esta página no puede leer tu correo aquí' }
       setProblem(gathered.problems[0] ?? null)
@@ -123,5 +124,5 @@ export function useInbox(mode: AiMode | null, tasks: Task[], today: string) {
     [setFound],
   )
 
-  return { available, count: found?.count ?? 0, take, clear }
+  return { available, count: found?.count ?? 0, replies: found?.replies ?? 0, take, clear }
 }

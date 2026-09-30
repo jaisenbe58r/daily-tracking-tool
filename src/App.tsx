@@ -16,6 +16,8 @@ import { useTemplates } from './lib/templates'
 import { descendantIds } from './lib/tree'
 import { useAi } from './ai/useAi'
 import { useInbox } from './ai/inbox/useInbox'
+import { DRAFT_LABEL, draftContext, draftRequest, getDraft, setDraft, usePrefetchDrafts } from './ai/drafts'
+import type { Meeting } from './ai/meeting'
 import { hideSnoozed, snoozedCount } from './lib/snooze'
 import { NoticeContext, useNoticeValue } from './lib/teach'
 
@@ -28,7 +30,7 @@ interface Seed {
   taskId: string | null
   /** Shown in the line. */
   text: string
-  mode: 'changes' | 'summary'
+  mode: 'changes' | 'summary' | 'draft'
   /** Sent instead of `text` while the line still shows it (a short label for a long instruction). */
   request?: string
 }
@@ -73,6 +75,7 @@ export default function App() {
   const ai = useAi(state.tasks, todayKey)
   const { mode: aiMode, hasKey: aiHasKey, forgetKey } = ai
   const inbox = useInbox(ai.mode, state.tasks, todayKey)
+  usePrefetchDrafts(ai.mode, inbox.available, state.tasks, todayKey)
   const aiReady = useRef(false)
   useEffect(() => {
     aiReady.current = ai.available
@@ -228,7 +231,67 @@ export default function App() {
     [openAi],
   )
 
-  const { present, fail, cancel: cancelAi } = ai
+  const { present, fail, cancel: cancelAi, showText } = ai
+
+  /**
+   * Alt+D: the mail this task means writing, drafted from its thread in the user's voice.
+   * A kept draft opens at once; `fresh` (Cmd+Enter in the line) writes it again, following `also` if typed.
+   */
+  const draftFor = useCallback(
+    async (taskId: string | null, fresh = false, also = '') => {
+      const task = taskId ? latest.current.tasks.find((t) => t.id === taskId) : undefined
+      if (!task?.text.trim()) return
+      const label = `${DRAFT_LABEL}: ${task.text.trim()}`
+      const run = ++captureRun.current
+      returnTo.current = null
+      setSeed({ taskId: task.id, text: label, mode: 'draft' })
+      setCapturing(true)
+      const kept = fresh ? undefined : getDraft(task.id)
+      if (kept) {
+        showText(label, kept)
+        return
+      }
+      present(label)
+      try {
+        const context = await draftContext(task)
+        if (run !== captureRun.current) return
+        const request = also ? `${draftRequest(task)}\nAdemás: ${also}` : draftRequest(task)
+        void write(request, context, task.id, (text) => setDraft(task.id, text))
+      } catch (error) {
+        if (run === captureRun.current) fail(label, error)
+      }
+    },
+    [showText, present, write, fail],
+  )
+
+  /** «Preparar reunión»: a note and a few subtasks for a meeting, as a proposal. */
+  const prepareMeeting = useCallback(
+    async (m: Meeting) => {
+      const { meetingRequest, meetingTask, meetingWhen, prepareContext } = await import('./ai/meeting')
+      const when = meetingWhen(m, latest.current.todayKey)
+      const label = `Preparar reunión: ${m.title} (${when})`
+      const existing = meetingTask(latest.current.tasks, m)
+      const run = ++captureRun.current
+      returnTo.current = null
+      setSeed({ taskId: existing?.id ?? null, text: label, mode: 'changes' })
+      setCapturing(true)
+      present(label)
+      try {
+        const context = await prepareContext(m)
+        if (run !== captureRun.current) return
+        void ask(meetingRequest(m, when, Boolean(existing)), existing?.id ?? null, context)
+      } catch (error) {
+        if (run === captureRun.current) fail(label, error)
+      }
+    },
+    [present, ask, fail],
+  )
+  const meetingItems = useCallback(async (): Promise<QuickItem[]> => {
+    const { upcomingMeetings, meetingWhen } = await import('./ai/meeting')
+    const meetings = (await upcomingMeetings()) ?? []
+    return meetings.map((m) => ({ label: m.title, hint: meetingWhen(m, latest.current.todayKey), run: () => void prepareMeeting(m) }))
+  }, [prepareMeeting])
+
   const { take, clear } = inbox
   /** Alt+I: the tasks found in mail and calendar, as a proposal to accept (Enter) or drop (Esc). */
   const recoger = useCallback(async () => {
@@ -292,6 +355,17 @@ export default function App() {
                     openAi(taskId, `Divide en pasos la tarea seleccionada: «${name}»`, 'changes', `Dividir en pasos: ${name}`) }]
                 : []),
               { label: 'Pedir a la IA…', hint: 'IA', keywords: 'ia ai pedir orden cambiar', run: () => openAi(taskId) },
+              ...(name
+                ? [{ label: 'Preparar borrador', hint: `${A}D`, keywords: 'ia ai borrador correo responder email redactar perseguir', run: () => void draftFor(taskId) }]
+                : []),
+              ...(inbox.available
+                ? [{
+                    label: 'Preparar reunión…',
+                    keywords: 'ia ai reunion reunión meeting preparar agenda calendario',
+                    list: { title: 'Preparar reunión', empty: 'No tienes reuniones hoy ni mañana', load: meetingItems },
+                    run: () => {},
+                  }]
+                : []),
               { label: 'Planificar el día', hint: `${A}P`, keywords: 'ia ai plan planificar hoy prioridades', run: () => planDay(taskId) },
               { label: 'Redactar resumen del día', hint: `${A}⇧R`, keywords: 'ia ai resumen redactar standup correo', run: () => writeSummary(taskId) },
               ...(aiMode === 'key' && aiHasKey
@@ -332,7 +406,7 @@ export default function App() {
         { label: 'Importar copia', hint: `${M}O`, keywords: 'backup json abrir cargar restaurar', run: openImport },
       ]
     },
-    [state.tasks, templates, focusId, toggleFocusMode, saveTemplate, removeTemplate, notify, dispatch, copySummary, exportAll, openImport, ai.available, aiMode, aiHasKey, forgetKey, openAi, planDay, writeSummary, inbox.available, recoger, openSource],
+    [state.tasks, templates, focusId, toggleFocusMode, saveTemplate, removeTemplate, notify, dispatch, copySummary, exportAll, openImport, ai.available, aiMode, aiHasKey, forgetKey, openAi, planDay, writeSummary, inbox.available, recoger, openSource, draftFor, meetingItems],
   )
 
   const setView = useCallback((v: View) => setPrefs((p) => ({ ...p, view: v })), [setPrefs])
@@ -393,6 +467,9 @@ export default function App() {
       } else if (e.altKey && e.code === 'KeyR') {
         e.preventDefault()
         copySummary()
+      } else if (e.altKey && e.code === 'KeyD' && aiReady.current) {
+        e.preventDefault()
+        void draftFor(activeTaskId())
       } else if (e.altKey && e.code === 'KeyP' && aiReady.current) {
         e.preventDefault()
         planDay(activeTaskId())
@@ -421,7 +498,7 @@ export default function App() {
       window.removeEventListener('dragover', onDragOver)
       window.removeEventListener('drop', onDrop)
     }
-  }, [dispatch, setView, setPrefs, exportAll, openImport, importFile, toggleFocusMode, copySummary, planDay, writeSummary, recoger, openSource])
+  }, [dispatch, setView, setPrefs, exportAll, openImport, importFile, toggleFocusMode, copySummary, planDay, writeSummary, recoger, openSource, draftFor])
 
   // Keep the heading right when the tab stays open past midnight.
   useEffect(() => {
@@ -458,7 +535,15 @@ export default function App() {
             {inbox.count > 0 && (
               <>
                 <button className="inbox-chip" title={`${RECOGER} (${isMac ? '⌥' : 'Alt+'}I)`} onClick={() => void recoger()}>
-                  {inbox.count}<span className="word"> {inbox.count === 1 ? 'tarea' : 'tareas'} en tu correo</span>
+                  {inbox.count}
+                  <span className="word">
+                    {' '}
+                    {!inbox.replies
+                      ? `${inbox.count === 1 ? 'tarea' : 'tareas'} en tu correo`
+                      : inbox.replies === inbox.count
+                        ? `${inbox.count === 1 ? 'respuesta' : 'respuestas'} en tu correo`
+                        : 'novedades en tu correo'}
+                  </span>
                 </button>
                 <span className="sep" />
               </>
@@ -556,7 +641,8 @@ export default function App() {
                     job: ai.job,
                     onAsk: (text) => {
                       const request = seed.request && text === seed.text ? seed.request : text
-                      if (seed.mode === 'summary') openAi(seed.taskId, request, 'summary', text)
+                      if (seed.mode === 'draft') void draftFor(seed.taskId, true, text === seed.text ? '' : text)
+                      else if (seed.mode === 'summary') openAi(seed.taskId, request, 'summary', text)
                       else void ai.ask(request, seed.taskId)
                     },
                     onCancel: ai.cancel,
@@ -564,10 +650,12 @@ export default function App() {
                     onAccept: () => {
                       const job = ai.job
                       if (job?.phase === 'text') {
+                        const draft = seed.mode === 'draft'
+                        const hasSource = draft && state.tasks.find((t) => t.id === seed.taskId)?.source
                         navigator.clipboard
                           ?.writeText(job.text)
-                          .then(() => notify('Resumen copiado'))
-                          .catch(() => notify('No se pudo copiar el resumen'))
+                          .then(() => notify(draft ? `Borrador copiado${hasSource ? ` · ${isMac ? '⌥' : 'Alt+'}O abre el correo` : ''}` : 'Resumen copiado'))
+                          .catch(() => notify(draft ? 'No se pudo copiar el borrador' : 'No se pudo copiar el resumen'))
                       } else if (job?.phase === 'proposal') {
                         // Another tab (or undo) changed the sheet meanwhile: applying would overwrite it.
                         if (job.base !== state.tasks) {

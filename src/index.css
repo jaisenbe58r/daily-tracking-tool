@@ -929,3 +929,13 @@ kbd {
 
 /* The brand green only as a filled block with black on top: the day is done. */
 .toast[data-zero] { background: var(--green); color: var(--on-green); }
+
+/* Borrador listo: one quiet character, ink only when the row is in use. */
+.draft-mark {
+  flex: 0 0 auto;
+  margin-top: 3px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--grey);
+}
+.row:focus-within .draft-mark { color: var(--ink); }

@@ -7,6 +7,7 @@ import { useToday } from '../lib/today'
 import { daysAway, isBack, isSnoozed, WAITING_TAG } from '../lib/snooze'
 import { dueLabel } from '../lib/parse'
 import { useNotice } from '../lib/teach'
+import { useHasDraft } from '../ai/drafts'
 
 interface Props {
   row: Row
@@ -46,6 +47,7 @@ function isSingleLine(el: HTMLTextAreaElement) {
 function TaskRowImpl({ row, focus, dragging, dispatch, onOpenActions, onDragStart, structural, inherit, activeTag, onTagClick, faded }: Props) {
   const today = useToday()
   const { teach } = useNotice()
+  const drafted = useHasDraft(row.task.id)
   const stale = isStale(row.task, today)
   const { task, depth, hasChildren, lastPath, context, dimmed } = row
   const textRef = useRef<HTMLTextAreaElement>(null)
@@ -283,6 +285,11 @@ function TaskRowImpl({ row, focus, dragging, dispatch, onOpenActions, onDragStar
                 <path d="M2 3h8M2 6h8M2 9h5" stroke="currentColor" strokeWidth="1.1" />
               </svg>
             </button>
+          )}
+          {drafted && task.status !== 'done' && (
+            <span className="draft-mark" title={`Borrador listo (${isMac ? '⌥' : 'Alt+'}D)`} aria-label="Borrador listo">
+              ✎
+            </span>
           )}
           {task.source && (
             <a

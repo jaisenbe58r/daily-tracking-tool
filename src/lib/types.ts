@@ -29,6 +29,10 @@ export interface Task {
 export interface Source {
   app: 'gmail' | 'calendar'
   url: string
+  /** Gmail thread id or Calendar event id, to read it again (older tasks: read from the url). */
+  id?: string
+  /** It came from a mail of mine still unanswered: a reply may close it. */
+  waiting?: boolean
 }
 
 /** Local dates (YYYY-MM-DD): hidden until `until`, postponed on `since`. */

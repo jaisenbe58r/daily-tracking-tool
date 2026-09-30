@@ -14,7 +14,16 @@ const REPEATS: Repeat[] = ['daily', 'weekdays', 'weekly', 'monthly']
 /** Tasks from mail or calendar. The first version kept the link in the notes; it moves out of the way. */
 function readSource(r: Record<string, unknown>): Pick<Task, 'source'> & Partial<Pick<Task, 'notes'>> {
   const s = r.source as Partial<Source> | null | undefined
-  if (s && (s.app === 'gmail' || s.app === 'calendar') && typeof s.url === 'string' && s.url.startsWith('https://')) return { source: { app: s.app, url: s.url } }
+  if (s && (s.app === 'gmail' || s.app === 'calendar') && typeof s.url === 'string' && s.url.startsWith('https://')) {
+    return {
+      source: {
+        app: s.app,
+        url: s.url,
+        ...(typeof s.id === 'string' && s.id ? { id: s.id } : {}),
+        ...(s.waiting === true ? { waiting: true } : {}),
+      },
+    }
+  }
   const legacy = typeof r.notes === 'string' ? r.notes.match(/^(Gmail|Google Calendar) · [^\n]*\n(https:\/\/\S+)$/) : null
   if (legacy) return { source: { app: legacy[1] === 'Gmail' ? 'gmail' : 'calendar', url: legacy[2] }, notes: '' }
   return {}

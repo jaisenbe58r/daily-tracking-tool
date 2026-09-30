@@ -4,7 +4,7 @@
  * test; reading the connectors lives in `connectors.ts`.
  */
 
-export type Kind = 'ask' | 'starred' | 'waiting' | 'invite'
+export type Kind = 'ask' | 'starred' | 'waiting' | 'invite' | 'reply'
 
 export interface Candidate {
   kind: Kind
@@ -21,6 +21,8 @@ export interface Candidate {
   /** What the model reads: the last message (trimmed), or the event's details. */
   body: string
   url: string
+  /** `reply`: the open task (its id) this answer may close. */
+  taskId?: string
 }
 
 export const seenKey = (c: Pick<Candidate, 'id' | 'version'>) => `${c.id}@${c.version}`
@@ -176,14 +178,15 @@ const KIND_LABEL: Record<Kind, string> = {
   starred: 'destacado por ti',
   waiting: 'esperas respuesta',
   invite: 'invitación sin responder',
+  reply: 'respuesta a tu tarea',
 }
 
-/** How the model reads the candidates: `c1`, `c2`… are what it cites back in `notes`. */
-export function describeCandidates(list: Candidate[]): string {
+/** How the model reads the candidates: `c1`, `c2`… are what it cites back in `notes`. `refOf` names the tasks replies answer. */
+export function describeCandidates(list: Candidate[], refOf: Map<string, string> = new Map()): string {
   return list
     .map((c, i) =>
       [
-        `[c${i + 1}] ${c.source} · ${KIND_LABEL[c.kind]} · ${c.when}`,
+        `[c${i + 1}] ${c.source} · ${KIND_LABEL[c.kind]}${c.taskId && refOf.has(c.taskId) ? ` ${refOf.get(c.taskId)}` : ''} · ${c.when}`,
         `Asunto: ${c.title}`,
         `De: ${c.from}`,
         c.body ? `Texto:\n${c.body}` : '',
@@ -192,4 +195,73 @@ export function describeCandidates(list: Candidate[]): string {
         .join('\n'),
     )
     .join('\n\n')
+}
+
+/**
+ * The Gmail thread or Calendar event behind a task. Newer tasks carry the id;
+ * older ones only have the link: Gmail's `thread-f:<decimal>` is the thread id
+ * in hex, and Calendar's `eid` is base64 of "<event id> <calendar>".
+ */
+export function sourceId(source: { app: 'gmail' | 'calendar'; url: string; id?: string } | null | undefined): string | null {
+  if (!source) return null
+  if (source.id) return source.id
+  if (source.app === 'gmail') {
+    const m = source.url.match(/thread-f:(\d+)/)
+    if (!m) return null
+    try {
+      return BigInt(m[1]).toString(16)
+    } catch {
+      return null
+    }
+  }
+  const eid = source.url.match(/[?&]eid=([^&#]+)/)?.[1]
+  if (!eid) return null
+  try {
+    const decoded = atob(decodeURIComponent(eid).replace(/-/g, '+').replace(/_/g, '/'))
+    return decoded.split(' ')[0] || null
+  } catch {
+    return null
+  }
+}
+
+/** An open task waiting on someone, whose thread a reply may close. */
+export interface Watched {
+  taskId: string
+  threadId: string
+  /** Replies before this (ms) were already there when the task was written. */
+  since: number
+}
+
+/** Open tasks from a mail that wait on someone: tagged #esperando, or found as "esperas respuesta". */
+export function watchedTasks(tasks: { id: string; status: string; tags: string[]; createdAt: number; source?: { app: 'gmail' | 'calendar'; url: string; id?: string; waiting?: boolean } | null }[]): Watched[] {
+  const out: Watched[] = []
+  for (const t of tasks) {
+    if (t.status === 'done' || t.source?.app !== 'gmail') continue
+    if (!t.tags.includes('esperando') && !t.source.waiting) continue
+    const threadId = sourceId(t.source)
+    if (threadId) out.push({ taskId: t.id, threadId, since: t.createdAt })
+  }
+  return out
+}
+
+/** Someone other than the user wrote in the thread after the task was written: maybe the answer. */
+export function replyCandidate(thread: GmailThread, w: Watched, me: Set<string>): Candidate | null {
+  const msgs = thread.messages ?? []
+  const last = lastOf(msgs)
+  if (!thread.id || !last?.id) return null
+  if (last.labelIds?.includes('SENT') || isMe(last.sender, me) || AUTOMATED.test(last.sender ?? '')) return null
+  const at = Date.parse(last.date ?? '')
+  if (!Number.isFinite(at) || at <= w.since) return null
+  return {
+    kind: 'reply',
+    id: thread.id,
+    version: last.id,
+    source: 'Gmail',
+    title: (msgs.find((m) => m.subject)?.subject ?? '(sin asunto)').trim(),
+    from: last.sender ?? '',
+    when: last.date ?? '',
+    body: cleanBody(last.plaintextBody ?? last.snippet ?? ''),
+    url: thread.viewUrl ?? '',
+    taskId: w.taskId,
+  }
 }

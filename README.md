@@ -70,7 +70,13 @@ Las propuestas se van dibujando mientras llegan. En pantallas táctiles, «IA»,
 
 **Recoger del correo y la agenda** (`Alt+I`, o `/` → Recoger): dentro de claude.ai, la app lee tu Gmail y tu Google Calendar con tus propios conectores de claude.ai y propone como tareas todo lo que te toca de forma clara, sin límite: correos que te escriben a ti (no en copia) y aún no has contestado, hilos destacados, correos tuyos de hace 2 a 10 días que siguen sin respuesta y reuniones de la próxima semana con la invitación sin responder. Se ven como cualquier otra propuesta: `Enter` las añade, `Esc` las descarta, `Cmd/Ctrl+Z` deshace. Cada tarea guarda en la nota el enlace a su correo o evento; `Alt+O` lo abre. Al abrir la página y cada 15 minutos mientras está a la vista, la app vuelve a mirar y la cabecera avisa («3 tareas en tu correo»); no se añade nada hasta que lo abres. Lo que ya viste no vuelve a proponerse, salvo que el hilo reciba una respuesta nueva. Solo lectura: la app no puede enviar, borrar ni responder invitaciones.
 
-Al modelo solo le llega tu petición y una lista compacta de las tareas (texto, estado, tags, fecha). Con Recoger, además, el último mensaje (recortado, sin el historial citado) de los hilos que pasan los filtros, y el título de las invitaciones pendientes. Lo único que corre en segundo plano es Recoger.
+**Cerrar el bucle**: las tareas que esperan una respuesta (con `#esperando` o las que Recoger sacó de un correo tuyo sin contestar) se vigilan en esa misma pasada. Cuando llega la respuesta, la cabecera lo dice («1 respuesta en tu correo») y Recoger propone marcar la tarea como hecha y, si la respuesta pide algo, añadir el siguiente paso.
+
+**Borrador listo** (`Alt+D`, o `/` → «Preparar borrador»): para una tarea que consiste en escribir a alguien, la app redacta el correo con tu tono a partir del hilo del que salió (o un recordatorio amable si estás esperando). Dentro de claude.ai las tareas que vienen de un correo ya lo traen preparado, y la fila lo marca con un ✎ discreto. `Enter` lo copia; `Alt+O` abre el correo para pegarlo. Escribe en la línea para pedir otra versión («más corto»). Nunca se envía nada desde la app.
+
+**Preparar reunión** (`/` → «Preparar reunión…»): elige una reunión de hoy o mañana y la app propone una nota corta (de qué va, qué se habló la última vez con esas personas, qué les debes) y hasta cuatro subtareas, en la tarea de la reunión o en una nueva.
+
+Al modelo solo le llega tu petición y una lista compacta de las tareas (texto, estado, tags, fecha). Con Recoger, además, el último mensaje (recortado, sin el historial citado) de los hilos que pasan los filtros, y el título de las invitaciones pendientes. Con Borrador listo y Preparar reunión, el hilo de esa tarea o los correos recientes con los asistentes. En segundo plano solo corren Recoger y, dentro de claude.ai, los borradores de hasta 6 tareas de correo por visita.
 
 **Cómo se activa**: la app elige sola la primera vía que funcione.
 
@@ -110,6 +116,7 @@ Sin ninguna de las tres, la app funciona igual.
 | `Alt+L` | Posponer (o devolver una pospuesta) |
 | `Alt+T` | Vista Hoy |
 | `Alt+I` | Recoger tareas del correo y la agenda (dentro de claude.ai) |
+| `Alt+D` | Borrador del correo de la tarea (se copia, no se envía) |
 | `Alt+O` | Abrir el correo o evento del que salió la tarea |
 | `Cmd/Ctrl+K` | Captura global |
 | `Cmd/Ctrl+F` | Buscar |
