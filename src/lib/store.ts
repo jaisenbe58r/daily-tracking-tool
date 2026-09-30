@@ -4,6 +4,7 @@ import * as tree from './tree'
 import { STORAGE_KEY, load, parse, save } from './persist'
 import { dateKey, parseOutline, parseTask } from './parse'
 import { carryOver } from './daily'
+import { WAITING_TAG } from './snooze'
 import { firstDue, plantNext } from './repeat'
 
 export type Caret = number | 'start' | 'end'
@@ -43,7 +44,10 @@ export type Action =
   /** Replaces everything (JSON import), as one undoable step. */
   | { type: 'import'; tasks: Task[] }
   /** New day: raise what's still open from earlier days. */
-  | { type: 'carry-over'; today: string }
+  | { type: 'carry-over'; today: string; lastDay?: string | null }
+  /** Posponer until `until`; `waiting` also tags it #esperando. */
+  | { type: 'snooze'; id: string; until: string; waiting?: boolean }
+  | { type: 'unsnooze'; id: string }
   | { type: 'add-child'; id: string }
   | { type: 'add-end'; inherit?: Inherit }
   | { type: 'indent'; id: string; caret?: Caret }
@@ -156,7 +160,20 @@ function reducer(state: State, action: Exclude<Action, { type: 'undo' | 'redo' }
     }
 
     case 'carry-over':
-      return { ...state, tasks: carryOver(tasks, action.today) }
+      return { ...state, tasks: carryOver(tasks, action.today, action.lastDay ?? null) }
+
+    case 'snooze': {
+      const task = find(action.id)
+      if (!task) return state
+      const tags = action.waiting && !task.tags.includes(WAITING_TAG) ? [...task.tags, WAITING_TAG] : task.tags
+      const next = tree.update(tasks, task.id, { snooze: { until: action.until, since: dateKey(new Date()) }, tags })
+      return { ...state, tasks: next }
+    }
+
+    case 'unsnooze': {
+      const task = find(action.id)
+      return task?.snooze ? { ...state, tasks: tree.update(tasks, task.id, { snooze: null }) } : state
+    }
 
     case 'import':
       return { tasks: action.tasks.length ? action.tasks : [tree.newTask()], focus: null }

@@ -2,7 +2,7 @@ import { useCallback, useRef, useState, type PointerEvent as ReactPointerEvent }
 import type { Action, AppState } from '../lib/store'
 import { childrenOf, descendantIds, flatten, nextSibling } from '../lib/tree'
 import type { Group, Row } from '../lib/types'
-import { QuickActions, type QuickItem } from './QuickActions'
+import { QuickActions, type QuickItem, type SubMenu } from './QuickActions'
 import { TaskRow } from './TaskRow'
 
 const INDENT = 24
@@ -34,11 +34,11 @@ interface Props {
 
 export function ListView({ state, dispatch, groups, structural, grouped, activeTag, onTagClick, extraActions, focused }: Props) {
   const listRef = useRef<HTMLDivElement>(null)
-  const [actionsFor, setActionsFor] = useState<{ id: string; anchor: DOMRect } | null>(null)
+  const [actionsFor, setActionsFor] = useState<{ id: string; anchor: DOMRect; sub: SubMenu | null } | null>(null)
   const [drag, setDrag] = useState<Drag | null>(null)
 
-  const openActions = useCallback((id: string, anchor: HTMLElement) => {
-    setActionsFor({ id, anchor: anchor.getBoundingClientRect() })
+  const openActions = useCallback((id: string, anchor: HTMLElement, sub: SubMenu | null = null) => {
+    setActionsFor({ id, anchor: anchor.getBoundingClientRect(), sub })
   }, [])
 
   // Pointer-driven tree drag & drop: vertical position picks the gap between
@@ -162,6 +162,7 @@ export function ListView({ state, dispatch, groups, structural, grouped, activeT
           task={actionsRow.task}
           hasChildren={actionsRow.hasChildren}
           anchor={actionsFor.anchor}
+          initialSub={actionsFor.sub}
           dispatch={dispatch}
           extra={extraActions(actionsRow.task.id)}
           onClose={(refocus) => {

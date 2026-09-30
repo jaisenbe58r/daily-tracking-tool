@@ -814,3 +814,37 @@ kbd {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* ── Posponer, Esperando, Hoy a cero ─────────────────── */
+
+/* Same quiet mono as the dates: "→ lunes" while away, "↩ 3 d" the day it's back. */
+.snooze {
+  flex: 0 0 auto;
+  height: 18px;
+  margin-top: 3px;
+  padding: 0 6px;
+  font-family: var(--mono);
+  font-weight: 500;
+  font-size: 10px;
+  line-height: 18px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--grey);
+}
+.snooze[data-state='back'] { color: var(--ink); }
+.row:has(.snooze[data-state='away']) .text { color: var(--grey); }
+
+.tool button .count { margin-left: 6px; color: var(--grey); font-variant-numeric: tabular-nums; }
+
+.qa-title {
+  padding: 8px 12px 0;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--grey);
+}
+
+/* The brand green only as a filled block with black on top: the day is done. */
+.toast[data-zero] { background: var(--green); color: var(--on-green); }

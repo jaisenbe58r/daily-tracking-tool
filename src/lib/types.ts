@@ -20,6 +20,14 @@ export interface Task {
   priority: boolean
   /** Recurring task: completing it plants the next occurrence right below. */
   repeat: Repeat | null
+  /** Posponer: hidden (with its subtasks) until `until`; back at the top that day. */
+  snooze: Snooze | null
+}
+
+/** Local dates (YYYY-MM-DD): hidden until `until`, postponed on `since`. */
+export interface Snooze {
+  until: string
+  since: string
 }
 
 /** `weekly` keeps the weekday of its date; `monthly` its day of the month. */

@@ -1,5 +1,6 @@
 import { parentPath } from './organize'
 import { dateKey } from './parse'
+import { wake } from './snooze'
 import { childrenOf, flatten } from './tree'
 import type { Task } from './types'
 
@@ -16,14 +17,20 @@ export function ageInDays(task: Task, today: string): number {
 }
 
 /**
- * First visit of a new day: top-level tasks still open from earlier days move
- * to the top of the sheet, keeping their order and their subtasks.
+ * First visit of a new day: postponed tasks whose day has come, then
+ * top-level tasks still open from earlier days, move to the top of the sheet,
+ * keeping their order and their subtasks. `lastDay` is the previous visit.
  */
-export function carryOver(tasks: Task[], today: string): Task[] {
-  const rising = new Set(childrenOf(tasks, null).filter((t) => isStale(t, today)).map((t) => t.id))
-  if (!rising.size) return tasks
+export function carryOver(input: Task[], today: string, lastDay: string | null = null): Task[] {
+  const { tasks, rising: back } = wake(input, today, lastDay)
+  const stale = new Set(childrenOf(tasks, null).filter((t) => isStale(t, today) && !back.has(t.id)).map((t) => t.id))
+  if (!back.size && !stale.size) return tasks
   const roots = childrenOf(tasks, null)
-  const reordered = [...roots.filter((t) => rising.has(t.id)), ...roots.filter((t) => !rising.has(t.id))]
+  const reordered = [
+    ...roots.filter((t) => back.has(t.id)),
+    ...roots.filter((t) => stale.has(t.id)),
+    ...roots.filter((t) => !back.has(t.id) && !stale.has(t.id)),
+  ]
   if (reordered.every((t, i) => t === roots[i])) return tasks
   // Roots are ordered by array position; the rest of the array keeps its own order.
   const others = tasks.filter((t) => t.parentId !== null)

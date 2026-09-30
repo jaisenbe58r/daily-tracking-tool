@@ -14,6 +14,7 @@ export function newTask(parentId: string | null = null, text = ''): Task {
     due: null,
     priority: false,
     repeat: null,
+    snooze: null,
   }
 }
 
