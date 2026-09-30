@@ -322,7 +322,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 }
 
 .body { flex: 1; min-width: 0; }
-.line { display: flex; align-items: flex-start; gap: 10px; min-height: 24px; }
+.line { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 4px 10px; min-height: 24px; }
 
 textarea {
   display: block;
@@ -340,7 +340,8 @@ textarea {
 }
 textarea::placeholder { color: color-mix(in srgb, var(--grey) 60%, var(--paper)); }
 
-.text { flex: 1; min-width: 0; height: 24px; }
+/* The text keeps at least ~14em; when tags and dates don't fit beside it they drop to a second line. */
+.text { flex: 1 1 14em; min-width: 0; height: 24px; }
 .row[data-status='done'] .text {
   color: var(--grey);
   text-decoration: line-through;
@@ -797,7 +798,7 @@ kbd {
   .view-toggle { justify-self: start; }
   .context { display: none; }
   .app[data-view='board'] .sheet { padding-right: 16px; }
-  .board { grid-template-columns: 1fr; gap: 28px; margin-left: 16px; }
+  .board { grid-template-columns: minmax(0, 1fr); gap: 28px; margin-left: 16px; }
   .column { min-height: 0; }
   .hints { display: none; }
   .counts .word { display: none; }

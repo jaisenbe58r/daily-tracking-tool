@@ -37,7 +37,7 @@ export function Legend({ children }: { children?: ReactNode }) {
 /** Rows are the pages this one crosses most, columns are weeks; a click on a row travels there, on a cell to that week's busiest day. */
 export function Trama({ mem, rows, go }: { mem: Memory; rows: TramaRow[]; go: Go }) {
   const LW = 170, CW = 10, CH = 14, RH = 24, TOP = 22
-  const W = LW + mem.weeks.length * (CW + 2), H = TOP + rows.length * RH
+  const W = LW + mem.weeks.length * (CW + 2) + 24, H = TOP + rows.length * RH
   const max = Math.max(1, ...rows.flatMap((r) => r.counts))
   const x = (i: number) => LW + i * (CW + 2)
   const busiest = (r: TramaRow, i: number) => {

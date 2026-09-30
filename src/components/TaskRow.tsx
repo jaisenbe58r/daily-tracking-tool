@@ -1,10 +1,10 @@
-import { memo, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
+import { memo, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import type { Action, Focus } from '../lib/store'
 import type { Group, Row } from '../lib/types'
 import { DueLabel } from './DueLabel'
 import { ageInDays, isStale } from '../lib/daily'
 import { useToday } from '../lib/today'
-import { daysAway, isBack, isSnoozed, WAITING_TAG } from '../lib/snooze'
+import { daysAway, daysWaiting, isBack, isSnoozed, WAITING_TAG } from '../lib/snooze'
 import { dueLabel } from '../lib/parse'
 import { useNotice } from '../lib/teach'
 
@@ -56,6 +56,19 @@ function TaskRowImpl({ row, focus, dragging, dispatch, onOpenActions, onDragStar
   const focused = focus?.id === task.id ? focus : null
 
   useLayoutEffect(() => autosize(textRef.current), [task.text])
+  // The width changes without the text changing (tags added, the window resized): fit the height again.
+  useEffect(() => {
+    const el = textRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    let width = el.clientWidth
+    const observer = new ResizeObserver(() => {
+      if (el.clientWidth === width) return
+      width = el.clientWidth
+      autosize(el)
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
   useLayoutEffect(() => autosize(notesRef.current), [task.notes, showNotes])
 
   // Apply focus requests coming from the store (new task, indent, arrows...).
@@ -249,7 +262,7 @@ function TaskRowImpl({ row, focus, dragging, dispatch, onOpenActions, onDragStar
           )}
           {task.snooze && isBack(task, today) && task.status !== 'done' && (
             <span className="snooze" data-state="back" title={`Pospuesta hace ${daysAway(task)} d; vuelve hoy`}>
-              {task.tags.includes(WAITING_TAG) ? `sin respuesta · ${daysAway(task)} d` : `↩ ${daysAway(task)} d`}
+              {task.tags.includes(WAITING_TAG) ? `sin respuesta · ${daysWaiting(task, today)} d` : `↩ ${daysAway(task)} d`}
             </span>
           )}
           {task.due && <DueLabel due={task.due} done={task.status === 'done'} repeat={task.repeat} />}

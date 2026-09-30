@@ -9,6 +9,7 @@ import { exportTasks, readBackup } from './lib/backup'
 import { allTags, inheritFromFilters, isFiltering, matches, organize } from './lib/organize'
 import { usePrefs, type View } from './lib/prefs'
 import { useTasks } from './lib/store'
+import { RESCUE_KEY, rescued } from './lib/persist'
 import { dateKey, parseTask } from './lib/parse'
 import { TodayContext } from './lib/today'
 import { dailySummary, subtreeOutline } from './lib/daily'
@@ -24,7 +25,7 @@ const MemoryView = lazy(() => import('./memory/MemoryView'))
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
 const M = isMac ? '⌘' : 'Ctrl '
-const A = isMac ? '⌥' : 'Alt '
+const A = isMac ? '⌥' : 'Alt+'
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 const todayFmt = new Intl.DateTimeFormat('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })
 
@@ -48,7 +49,10 @@ export default function App() {
   const effective = useMemo(() => ({ ...filters, tag }), [filters, tag])
   const groups = useMemo(() => organize(shown, sort, effective, today.getTime()), [shown, sort, effective, today])
   const filtering = isFiltering(effective)
-  const [toast, setToast] = useState<{ text: string; id: number; zero?: boolean } | null>(null)
+  // A save we couldn't read was kept aside rather than overwritten: the first notice says so.
+  const [toast, setToast] = useState<{ text: string; id: number; zero?: boolean } | null>(() =>
+    rescued ? { text: `La hoja guardada estaba dañada; se ha apartado sin borrarla (${RESCUE_KEY})`, id: 0 } : null,
+  )
   const fileRef = useRef<HTMLInputElement>(null)
   const { templates, save: saveTemplate, remove: removeTemplate, replaceAll: replaceTemplates } = useTemplates()
   const [capturing, setCapturing] = useState(false)
