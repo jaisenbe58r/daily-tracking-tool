@@ -1,11 +1,18 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { Action } from '../lib/store'
 import type { Repeat, Task } from '../lib/types'
 import { useToday } from '../lib/today'
+import { dueLabel } from '../lib/parse'
+import { isSnoozed, resolveSnooze, snoozeChoices } from '../lib/snooze'
+import { isShortcut, useNotice } from '../lib/teach'
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
 const M = isMac ? '⌘' : 'Ctrl '
 const A = isMac ? '⌥' : 'Alt '
+
+const dayFmt = new Intl.DateTimeFormat('es-ES', { weekday: 'short', day: 'numeric', month: 'short' })
+/** "jue 1 oct", always the date (the label already says "Mañana"). */
+const shortDate = (day: string) => dayFmt.format(new Date(`${day}T12:00`)).replace(/\./g, '').replace(',', '')
 
 const REPEATS: { repeat: Repeat; label: string }[] = [
   { repeat: 'daily', label: 'cada día' },
@@ -21,7 +28,14 @@ export interface QuickItem {
   run: () => void
   /** Only listed once the user types something that matches (rare or destructive actions). */
   searchOnly?: boolean
+  /** Keeps the menu open (it switches to a second list, like the dates for Posponer). */
+  stay?: boolean
+  /** Opens a second list that has to be fetched first (today's meetings, say). */
+  list?: { title: string; empty: string; load: () => Promise<QuickItem[]> }
 }
+
+/** Second lists: the day to postpone to, plain or waiting on someone. */
+export type SubMenu = 'snooze' | 'wait'
 type Item = QuickItem
 
 interface Props {
@@ -32,14 +46,27 @@ interface Props {
   /** App-wide actions (templates, summary, backup…) listed after the task's own. */
   extra: QuickItem[]
   onClose: (refocus: boolean) => void
+  /** Open straight on a second list (Alt+L opens the dates for Posponer). */
+  initialSub?: SubMenu | null
 }
 
-export function QuickActions({ task, hasChildren, anchor, dispatch, extra, onClose }: Props) {
+export function QuickActions({ task, hasChildren, anchor, dispatch, extra, onClose, initialSub = null }: Props) {
   const [query, setQuery] = useState('')
   const [active, setActive] = useState(0)
+  const [sub, setSub] = useState<SubMenu | null>(initialSub)
+  /** A fetched second list: null items while it loads. */
+  const [picker, setPicker] = useState<{ title: string; empty: string; items: Item[] | null } | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const id = task.id
   const today = useToday()
+  const { notify, teach } = useNotice()
+  const away = isSnoozed(task, today)
+
+  const openSub = useCallback((next: SubMenu | null) => {
+    setSub(next)
+    setQuery('')
+    setActive(0)
+  }, [])
 
   const items = useMemo<Item[]>(() => {
     const focusText = (caret: 'end' | 'start' = 'end') => dispatch({ type: 'focus', id, caret })
@@ -61,6 +88,12 @@ export function QuickActions({ task, hasChildren, anchor, dispatch, extra, onClo
         keywords: 'hoy fecha today planificar',
         run: () => { dispatch({ type: 'toggle-today', id }); focusText() },
       },
+      ...(away
+        ? [{ label: 'Quitar posponer', hint: `${A}L`, keywords: 'posponer snooze volver recordar', run: () => { dispatch({ type: 'unsnooze', id }); focusText() } }]
+        : [
+            { label: 'Posponer…', hint: `${A}L`, keywords: 'posponer snooze luego recordar ocultar', stay: true, run: () => openSub('snooze') },
+            { label: 'Esperando…', keywords: 'esperando respuesta seguimiento perseguir follow', stay: true, run: () => openSub('wait') },
+          ]),
       {
         label: task.priority ? 'Quitar prioridad' : 'Prioridad',
         hint: '!',
@@ -107,17 +140,62 @@ export function QuickActions({ task, hasChildren, anchor, dispatch, extra, onClo
     }
     list.push({ label: 'Eliminar', keywords: 'borrar delete', run: () => dispatch({ type: 'remove', id }) })
     return [...list, ...extra]
-  }, [dispatch, id, task.status, task.text, task.collapsed, task.due, task.priority, task.repeat, today, hasChildren, extra])
+  }, [dispatch, id, task.status, task.text, task.collapsed, task.due, task.priority, task.repeat, away, today, hasChildren, extra, openSub])
+
+  // Dates for Posponer / Esperando: the usual picks, or whatever date the user types.
+  const subItems = useMemo<Item[]>(() => {
+    if (!sub) return []
+    const now = new Date(`${today}T12:00`)
+    const postpone = (until: string) => () => {
+      // The row is about to disappear: keep the cursor on the row above (or below).
+      const rows = [...document.querySelectorAll<HTMLElement>('[data-row-id]')].map((el) => el.dataset.rowId!)
+      const at = rows.indexOf(id)
+      const neighbour = rows[at - 1] ?? rows[at + 1]
+      dispatch({ type: 'snooze', id, until, waiting: sub === 'wait' })
+      if (neighbour) dispatch({ type: 'focus', id: neighbour })
+      notify(`${sub === 'wait' ? 'Esperando' : 'Pospuesta'} hasta ${dueLabel(until, now).toLowerCase()} · ${isMac ? '⌘' : 'Ctrl+'}Z deshace`)
+    }
+    const typed = query.trim() ? resolveSnooze(query, now) : null
+    const choices = snoozeChoices(now, sub === 'wait')
+    const q = query.trim().toLowerCase()
+    return [
+      ...(typed ? [{ label: `Hasta ${dueLabel(typed, now).toLowerCase()}`, run: postpone(typed) }] : []),
+      ...choices
+        .filter((c) => !q || typed || c.label.toLowerCase().includes(q))
+        .filter((c) => c.until !== typed)
+        .map((c) => ({ label: c.label, hint: shortDate(c.until), run: postpone(c.until) })),
+    ]
+  }, [sub, query, today, id, dispatch, notify])
 
   const q = query.trim().toLowerCase()
-  const filtered = q ? items.filter((i) => `${i.label} ${i.keywords ?? ''}`.toLowerCase().includes(q)) : items.filter((i) => !i.searchOnly)
+  const filtered = picker
+    ? (picker.items ?? []).filter((i) => !q || i.label.toLowerCase().includes(q))
+    : sub
+    ? subItems
+    : q
+      ? items.filter((i) => `${i.label} ${i.keywords ?? ''}`.toLowerCase().includes(q))
+      : items.filter((i) => !i.searchOnly)
   const current = Math.min(active, Math.max(filtered.length - 1, 0))
 
-  useLayoutEffect(() => inputRef.current?.focus(), [])
+  // On open, and again when switching to the dates (a click may have taken focus away).
+  useLayoutEffect(() => inputRef.current?.focus(), [sub])
 
   const run = (item: Item | undefined) => {
     if (!item) return
-    onClose(false)
+    if (item.list) {
+      const { title, empty, load } = item.list
+      setPicker({ title, empty, items: null })
+      setQuery('')
+      setActive(0)
+      load().then(
+        (items) => setPicker((p) => (p && p.title === title ? { ...p, items } : p)),
+        () => setPicker((p) => (p && p.title === title ? { ...p, items: [], empty: 'No se pudo leer' } : p)),
+      )
+      return
+    }
+    // Chosen from the menu: name its key, the first few times.
+    if (!sub && !picker && isShortcut(item.hint)) teach(item.label, item.hint)
+    if (!item.stay) onClose(false)
     item.run()
   }
 
@@ -126,24 +204,28 @@ export function QuickActions({ task, hasChildren, anchor, dispatch, extra, onClo
 
   return (
     <div className="qa-backdrop" onPointerDown={() => onClose(true)}>
-      <div className="qa" style={{ top, left }} onPointerDown={(e) => e.stopPropagation()} role="dialog" aria-label="Acciones rápidas">
+      <div className="qa" style={{ top, left }} onPointerDown={(e) => e.stopPropagation()} role="dialog" aria-label={sub ? (sub === 'wait' ? 'Esperando hasta' : 'Posponer hasta') : 'Acciones rápidas'}>
+        {picker && <div className="qa-title">{picker.title}</div>}
+        {!picker && sub && <div className="qa-title">{sub === 'wait' ? 'Esperando respuesta hasta' : 'Posponer hasta'}</div>}
         <input
           ref={inputRef}
           className="qa-input"
           value={query}
-          placeholder="Acción…"
+          placeholder={picker ? 'Buscar…' : sub ? 'lunes, 15/10, 3 días…' : 'Acción…'}
           onChange={(e) => { setQuery(e.target.value); setActive(0) }}
           onKeyDown={(e) => {
             if (e.key === 'ArrowDown') { e.preventDefault(); setActive((current + 1) % Math.max(filtered.length, 1)) }
             else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((current - 1 + filtered.length) % Math.max(filtered.length, 1)) }
             else if (e.key === 'Enter') { e.preventDefault(); run(filtered[current]) }
+            else if ((e.key === 'Escape' || (e.key === 'Backspace' && !query)) && picker) { e.preventDefault(); setPicker(null); setQuery('') }
+            else if ((e.key === 'Escape' || (e.key === 'Backspace' && !query)) && sub && !initialSub) { e.preventDefault(); openSub(null) }
             else if (e.key === 'Escape' || (e.key === 'Backspace' && !query)) { e.preventDefault(); onClose(true) }
           }}
         />
         <ul className="qa-list" role="listbox">
           {filtered.map((item, i) => (
             <li
-              key={item.label}
+              key={`${i}-${item.label}`}
               role="option"
               aria-selected={i === current}
               className="qa-item"
@@ -154,7 +236,11 @@ export function QuickActions({ task, hasChildren, anchor, dispatch, extra, onClo
               {item.hint && <kbd>{item.hint}</kbd>}
             </li>
           ))}
-          {!filtered.length && <li className="qa-empty">Sin resultados</li>}
+          {!filtered.length && (
+            <li className="qa-empty">
+              {picker ? (picker.items === null ? 'Leyendo…' : picker.empty) : sub ? 'Escribe un día: lunes, 15/10, 3 días…' : 'Sin resultados'}
+            </li>
+          )}
         </ul>
       </div>
     </div>

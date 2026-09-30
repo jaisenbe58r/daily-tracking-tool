@@ -4,11 +4,13 @@ import {
   candidatesFromEvents,
   candidatesFromThreads,
   dedupe,
+  replyCandidate,
   shortlist,
   type CalendarEvent,
   type Candidate,
   type GmailThread,
   type Kind,
+  type Watched,
 } from './sources'
 
 /**
@@ -122,6 +124,16 @@ async function calendar(m: Mcp, me: Set<string>, now: number): Promise<Candidate
   return candidatesFromEvents(payload.events ?? [], me)
 }
 
+/** Threads the user is waiting on, read again: did someone answer since the task was written? */
+async function replies(m: Mcp, me: Set<string>, watched: Watched[]): Promise<Candidate[]> {
+  const found = await pool(watched.slice(0, MAX_WATCHED), 4, async (w) => {
+    const thread = await call<GmailThread>(m, GMAIL, 'get_thread', { threadId: w.threadId, messageFormat: 'PLAIN_TEXT' }).catch(() => null)
+    return thread ? replyCandidate(thread, w, me) : null
+  })
+  return found.filter((c): c is Candidate => c !== null)
+}
+const MAX_WATCHED = 15
+
 export interface Gathered {
   candidates: Candidate[]
   /** One line per source that couldn't be read, for the user. */
@@ -132,7 +144,7 @@ export interface Gathered {
  * Everything that may hide a task, from both sources. A source that fails
  * doesn't stop the other. `seen` skips threads and events already proposed.
  */
-export async function gather(seen: Seen): Promise<Gathered | null> {
+export async function gather(seen: Seen, watched: Watched[] = []): Promise<Gathered | null> {
   const m = await connectors()
   if (!m) return null
   const now = Date.now()
@@ -147,6 +159,41 @@ export async function gather(seen: Seen): Promise<Gathered | null> {
     problems.push(sourceProblem(GMAIL, error))
     return []
   })
-  const candidates = dedupe([...mails, ...events]).filter((c) => !seen(c))
+  // Replies first: a thread that answers a waiting task is that, not a new question.
+  const answers = await replies(m, me, watched).catch(() => [])
+  const candidates = dedupe([...answers, ...mails, ...events]).filter((c) => !seen(c))
   return { candidates, problems }
+}
+
+/** One Gmail thread, whole, for a draft. Null outside claude.ai or when it can't be read. */
+export async function readThread(threadId: string): Promise<GmailThread | null> {
+  const m = await connectors()
+  if (!m) return null
+  return call<GmailThread>(m, GMAIL, 'get_thread', { threadId, messageFormat: 'PLAIN_TEXT' }).catch(() => null)
+}
+
+/** Events between two instants, from the primary calendar, and the calendar's owner (the user's address). */
+export async function readEvents(from: number, to: number): Promise<{ events: CalendarEvent[]; me: string | null } | null> {
+  const m = await connectors()
+  if (!m) return null
+  const payload = await call<{ events?: CalendarEvent[]; summary?: string }>(m, CALENDAR, 'list_events', {
+    startTime: new Date(from).toISOString(),
+    endTime: new Date(to).toISOString(),
+    orderBy: 'startTime',
+    pageSize: 50,
+  })
+  return { events: payload.events ?? [], me: payload.summary?.includes('@') ? address(payload.summary) : null }
+}
+
+/** Recent threads with some people (subject, who, when, a snippet): what a meeting brief draws on. */
+export async function mailWith(people: string[], days = 45): Promise<GmailThread[]> {
+  const m = await connectors()
+  if (!m || !people.length) return []
+  const who = people.slice(0, 8).map((p) => `from:${p} OR to:${p}`).join(' OR ')
+  const { threads = [] } = await call<{ threads?: GmailThread[] }>(m, GMAIL, 'search_threads', {
+    query: `newer_than:${days}d (${who})`,
+    pageSize: 10,
+    view: 'THREAD_VIEW_MINIMAL',
+  }).catch(() => ({ threads: [] as GmailThread[] }))
+  return threads
 }

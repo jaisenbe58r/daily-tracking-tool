@@ -4,13 +4,17 @@ import type { Group, Row } from '../lib/types'
 import { DueLabel } from './DueLabel'
 import { ageInDays, isStale } from '../lib/daily'
 import { useToday } from '../lib/today'
+import { daysAway, isBack, isSnoozed, WAITING_TAG } from '../lib/snooze'
+import { dueLabel } from '../lib/parse'
+import { useNotice } from '../lib/teach'
+import { useHasDraft } from '../ai/drafts'
 
 interface Props {
   row: Row
   focus: Focus | null
   dragging: boolean
   dispatch: (action: Action) => void
-  onOpenActions: (id: string, anchor: HTMLElement) => void
+  onOpenActions: (id: string, anchor: HTMLElement, sub?: 'snooze' | 'wait' | null) => void
   onDragStart: (id: string, e: PointerEvent) => void
   /** False in grouped views, where the tree can't be edited (no Tab, no dragging). */
   structural: boolean
@@ -23,6 +27,9 @@ interface Props {
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
 const mod = (e: KeyboardEvent) => (isMac ? e.metaKey : e.ctrlKey)
+const M = isMac ? '⌘' : 'Ctrl+'
+/** A real mouse or touch click (keyboard "clicks" report no detail). */
+const byPointer = (e: React.MouseEvent) => e.detail > 0
 
 const dateFmt = new Intl.DateTimeFormat('es-ES', { day: '2-digit', month: 'short' })
 const fullDateFmt = new Intl.DateTimeFormat('es-ES', { dateStyle: 'full', timeStyle: 'short' })
@@ -39,6 +46,8 @@ function isSingleLine(el: HTMLTextAreaElement) {
 
 function TaskRowImpl({ row, focus, dragging, dispatch, onOpenActions, onDragStart, structural, inherit, activeTag, onTagClick, faded }: Props) {
   const today = useToday()
+  const { teach } = useNotice()
+  const drafted = useHasDraft(row.task.id)
   const stale = isStale(row.task, today)
   const { task, depth, hasChildren, lastPath, context, dimmed } = row
   const textRef = useRef<HTMLTextAreaElement>(null)
@@ -114,6 +123,11 @@ function TaskRowImpl({ row, focus, dragging, dispatch, onOpenActions, onDragStar
     } else if (e.altKey && e.code === 'KeyH') {
       e.preventDefault()
       dispatch({ type: 'toggle-today', id: task.id })
+    } else if (e.altKey && e.code === 'KeyL') {
+      e.preventDefault()
+      dispatch({ type: 'commit', id: task.id })
+      if (isSnoozed(task, today)) dispatch({ type: 'unsnooze', id: task.id })
+      else onOpenActions(task.id, el, 'snooze')
     } else if (e.key === 'Escape') {
       el.blur()
     }
@@ -183,7 +197,10 @@ function TaskRowImpl({ row, focus, dragging, dispatch, onOpenActions, onDragStar
         data-collapsed={task.collapsed || undefined}
         tabIndex={-1}
         aria-label={task.collapsed ? 'Expandir' : 'Colapsar'}
-        onClick={() => dispatch({ type: 'toggle-collapse', id: task.id })}
+        onClick={(e) => {
+          dispatch({ type: 'toggle-collapse', id: task.id })
+          if (byPointer(e)) teach('collapse', `${M}.`)
+        }}
       >
         <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden>
           <path d="M3 2l3.5 3L3 8" fill="none" stroke="currentColor" strokeWidth="1.3" />
@@ -197,7 +214,10 @@ function TaskRowImpl({ row, focus, dragging, dispatch, onOpenActions, onDragStar
         aria-label={statusLabel}
         title={statusLabel}
         tabIndex={-1}
-        onClick={() => dispatch({ type: 'toggle-done', id: task.id })}
+        onClick={(e) => {
+          dispatch({ type: 'toggle-done', id: task.id })
+          if (byPointer(e)) teach('complete', `${M}↵`)
+        }}
       >
         <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden>
           <path d="M2 5.2l2 2L8 3" fill="none" stroke="currentColor" strokeWidth="1.6" />
@@ -224,6 +244,16 @@ function TaskRowImpl({ row, focus, dragging, dispatch, onOpenActions, onDragStar
             onPaste={onPaste}
             onBlur={() => dispatch({ type: 'commit', id: task.id })}
           />
+          {task.snooze && isSnoozed(task, today) && (
+            <span className="snooze" data-state="away" title={`Pospuesta hasta ${dueLabel(task.snooze.until, new Date(`${today}T12:00`)).toLowerCase()} (${isMac ? '⌥' : 'Alt+'}L la devuelve)`}>
+              → {dueLabel(task.snooze.until, new Date(`${today}T12:00`)).toLowerCase()}
+            </span>
+          )}
+          {task.snooze && isBack(task, today) && task.status !== 'done' && (
+            <span className="snooze" data-state="back" title={`Pospuesta hace ${daysAway(task)} d; vuelve hoy`}>
+              {task.tags.includes(WAITING_TAG) ? `sin respuesta · ${daysAway(task)} d` : `↩ ${daysAway(task)} d`}
+            </span>
+          )}
           {task.due && <DueLabel due={task.due} done={task.status === 'done'} repeat={task.repeat} />}
           {context && <span className="context" title={context}>{context}</span>}
           {task.tags.length > 0 && (
@@ -247,11 +277,19 @@ function TaskRowImpl({ row, focus, dragging, dispatch, onOpenActions, onDragStar
             </span>
           )}
           {!showNotes && (
-            <button className="note-toggle" tabIndex={-1} title="Añadir nota (⇧↵)" onClick={() => dispatch({ type: 'focus', id: task.id, target: 'notes' })}>
+            <button className="note-toggle" tabIndex={-1} title="Añadir nota (⇧↵)" onClick={(e) => {
+              dispatch({ type: 'focus', id: task.id, target: 'notes' })
+              if (byPointer(e)) teach('note', '⇧↵')
+            }}>
               <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden>
                 <path d="M2 3h8M2 6h8M2 9h5" stroke="currentColor" strokeWidth="1.1" />
               </svg>
             </button>
+          )}
+          {drafted && task.status !== 'done' && (
+            <span className="draft-mark" title={`Borrador listo (${isMac ? '⌥' : 'Alt+'}D)`} aria-label="Borrador listo">
+              ✎
+            </span>
           )}
           {task.source && (
             <a

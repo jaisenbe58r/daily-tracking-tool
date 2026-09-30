@@ -39,6 +39,14 @@ Al pulsar Enter (o salir de la línea), el texto se interpreta:
 
 **Día nuevo**: la primera vez que abres la hoja cada día, lo que quedó abierto de días anteriores sube arriba, y su fecha se cambia por la edad (`3 d`) para que se note lo que se arrastra.
 
+**Posponer** (`Alt+L` sobre una tarea, o `/` → «Posponer…»): elige un día (`Mañana`, `El lunes`…) o escríbelo (`viernes`, `15/10`, `3 días`, `2 semanas`). La tarea sale de la hoja y del Board, con sus subtareas, y ese día vuelve arriba con `↩ 3 d` (los días que estuvo fuera). No es lo mismo que planificar: la fecha dice para cuándo; posponer dice que no quieres verla hasta entonces. Arriba, «2 pospuestas» las enseña; `Alt+L` sobre una pospuesta la devuelve ya.
+
+**Esperando** (`/` → «Esperando…»): para lo que depende de otra persona. Pospone la tarea (por defecto tres días laborables) y le pone `#esperando`. Si sigue abierta ese día, vuelve con `sin respuesta · 3 d` para que la persigas.
+
+**Hoy a cero**: junto a «Hoy», un número pequeño dice lo que queda para hoy. Al cerrar la última, un aviso verde lo celebra y recuerda `Alt+R`.
+
+**Los atajos se enseñan solos**: si haces con el ratón o desde `/` algo que tiene tecla, un aviso breve te la dice. Solo las tres primeras veces de cada acción.
+
 **Resumen del día** (`Alt+R`): copia al portapapeles un Markdown con lo hecho hoy (con su proyecto) y lo que está en curso, listo para pegar en un chat o un correo.
 
 **Plantillas**: en `/`, «Guardar como plantilla» guarda la tarea con sus subtareas; luego «Plantilla · nombre» la inserta (sin estados ni fechas). Para borrar una, escribe «borrar» en el menú. Las plantillas viajan en la copia JSON.
@@ -62,7 +70,13 @@ Las propuestas se van dibujando mientras llegan. En pantallas táctiles, «IA»,
 
 **Recoger del correo y la agenda** (`Alt+I`, o `/` → Recoger): dentro de claude.ai, la app lee tu Gmail y tu Google Calendar con tus propios conectores de claude.ai y propone como tareas todo lo que te toca de forma clara, sin límite: correos que te escriben a ti (no en copia) y aún no has contestado, hilos destacados, correos tuyos de hace 2 a 10 días que siguen sin respuesta y reuniones de la próxima semana con la invitación sin responder. Se ven como cualquier otra propuesta: `Enter` las añade, `Esc` las descarta, `Cmd/Ctrl+Z` deshace. Cada tarea guarda en la nota el enlace a su correo o evento; `Alt+O` lo abre. Al abrir la página y cada 15 minutos mientras está a la vista, la app vuelve a mirar y la cabecera avisa («3 tareas en tu correo»); no se añade nada hasta que lo abres. Lo que ya viste no vuelve a proponerse, salvo que el hilo reciba una respuesta nueva. Solo lectura: la app no puede enviar, borrar ni responder invitaciones.
 
-Al modelo solo le llega tu petición y una lista compacta de las tareas (texto, estado, tags, fecha). Con Recoger, además, el último mensaje (recortado, sin el historial citado) de los hilos que pasan los filtros, y el título de las invitaciones pendientes. Lo único que corre en segundo plano es Recoger.
+**Cerrar el bucle**: las tareas que esperan una respuesta (con `#esperando` o las que Recoger sacó de un correo tuyo sin contestar) se vigilan en esa misma pasada. Cuando llega la respuesta, la cabecera lo dice («1 respuesta en tu correo») y Recoger propone marcar la tarea como hecha y, si la respuesta pide algo, añadir el siguiente paso.
+
+**Borrador listo** (`Alt+D`, o `/` → «Preparar borrador»): para una tarea que consiste en escribir a alguien, la app redacta el correo con tu tono a partir del hilo del que salió (o un recordatorio amable si estás esperando). Dentro de claude.ai las tareas que vienen de un correo ya lo traen preparado, y la fila lo marca con un ✎ discreto. `Enter` lo copia; `Alt+O` abre el correo para pegarlo. Escribe en la línea para pedir otra versión («más corto»). Nunca se envía nada desde la app.
+
+**Preparar reunión** (`/` → «Preparar reunión…»): elige una reunión de hoy o mañana y la app propone una nota corta (de qué va, qué se habló la última vez con esas personas, qué les debes) y hasta cuatro subtareas, en la tarea de la reunión o en una nueva.
+
+Al modelo solo le llega tu petición y una lista compacta de las tareas (texto, estado, tags, fecha). Con Recoger, además, el último mensaje (recortado, sin el historial citado) de los hilos que pasan los filtros, y el título de las invitaciones pendientes. Con Borrador listo y Preparar reunión, el hilo de esa tarea o los correos recientes con los asistentes. En segundo plano solo corren Recoger y, dentro de claude.ai, los borradores de hasta 6 tareas de correo por visita.
 
 **Cómo se activa**: la app elige sola la primera vía que funcione.
 
@@ -99,8 +113,10 @@ Sin ninguna de las tres, la app funciona igual.
 | `Backspace` en una tarea vacía | Borrarla |
 | `Cmd/Ctrl+Z` · `Cmd/Ctrl+Shift+Z` | Deshacer · rehacer (texto y estructura) |
 | `Alt+H` | Planificar para hoy (o quitarlo) |
+| `Alt+L` | Posponer (o devolver una pospuesta) |
 | `Alt+T` | Vista Hoy |
 | `Alt+I` | Recoger tareas del correo y la agenda (dentro de claude.ai) |
+| `Alt+D` | Borrador del correo de la tarea (se copia, no se envía) |
 | `Alt+O` | Abrir el correo o evento del que salió la tarea |
 | `Cmd/Ctrl+K` | Captura global |
 | `Cmd/Ctrl+F` | Buscar |
@@ -142,6 +158,8 @@ La vista, el orden y los filtros se recuerdan en cada navegador.
 - `src/lib/daily.ts`: día nuevo (tareas arrastradas y su edad) y resumen en Markdown.
 - `src/lib/repeat.ts`: tareas recurrentes (gramática, siguiente fecha y la copia al completar).
 - `src/lib/templates.ts`: plantillas guardadas.
+- `src/lib/snooze.ts`: posponer y esperando (fechas, ocultar, volver al día siguiente).
+- `src/lib/teach.ts`: avisos y los atajos que se enseñan solos.
 - `src/lib/prefs.ts`: vista, orden y filtros recordados por navegador.
 - `src/components/`: `ListView` y `TaskRow` (folio), `BoardView` (kanban), `Toolbar`, el menú `/`, `QuickCapture` y `SearchBar`.
 

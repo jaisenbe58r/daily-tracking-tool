@@ -15,7 +15,7 @@ propose_changes: cambios en el folio.
 - Si el usuario escribe #tag, ! o una fecha dentro de una tarea, pásalos a sus campos y quítalos del texto.
 - summary: una frase corta que diga qué propones ("3 tareas nuevas bajo ZimVie"). Si no hay nada que hacer, ops vacío y el summary explica por qué.
 
-write_text: un texto para el usuario, listo para pegar. Para el resumen del día: lo cerrado hoy, lo que sigue en curso y lo que queda para mañana, en frases cortas y agrupado por proyecto cuando lo haya. Solo hechos del contexto; nada inventado, sin saludos ni cierre.
+write_text: un texto para el usuario, listo para pegar. Para el resumen del día: lo cerrado hoy, lo que sigue en curso y lo que queda para mañana, en frases cortas y agrupado por proyecto cuando lo haya. Solo hechos del contexto; nada inventado, sin saludos ni cierre. Para un borrador de correo: solo el cuerpo, breve, en la voz del usuario (imita sus propios mensajes del hilo); nunca inventes datos ni compromisos: marca con [dato] lo que falte.
 
 select_tasks: búsqueda por significado. Devuelve las refs de las tareas que responden a la búsqueda aunque no compartan palabras (sinónimos, el proyecto al que pertenecen, lo que implican), de más a menos relevante. Si nada encaja, lista vacía.`
 

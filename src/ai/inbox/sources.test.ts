@@ -74,7 +74,7 @@ describe('finish', () => {
       cands,
     )
     expect(ops).toEqual([
-      { op: 'add', text: 'Responder invitación: Kick-off', parent: null, tags: [], due: '2026-10-01', source: { app: 'calendar', url: 'https://www.google.com/calendar/event?eid=1' } },
+      { op: 'add', text: 'Responder invitación: Kick-off', parent: null, tags: [], due: '2026-10-01', source: { app: 'calendar', url: 'https://www.google.com/calendar/event?eid=1', id: 'e1' } },
       { op: 'add', text: 'Sin origen', parent: null, tags: [], due: null },
     ])
   })

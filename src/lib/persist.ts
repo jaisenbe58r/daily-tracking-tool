@@ -1,4 +1,4 @@
-import type { Repeat, Source, Status, Task } from './types'
+import type { Repeat, Snooze, Source, Status, Task } from './types'
 import { newTask } from './tree'
 
 export const STORAGE_KEY = 'daily-tracking-tool:v1'
@@ -14,7 +14,16 @@ const REPEATS: Repeat[] = ['daily', 'weekdays', 'weekly', 'monthly']
 /** Tasks from mail or calendar. The first version kept the link in the notes; it moves out of the way. */
 function readSource(r: Record<string, unknown>): Pick<Task, 'source'> & Partial<Pick<Task, 'notes'>> {
   const s = r.source as Partial<Source> | null | undefined
-  if (s && (s.app === 'gmail' || s.app === 'calendar') && typeof s.url === 'string' && s.url.startsWith('https://')) return { source: { app: s.app, url: s.url } }
+  if (s && (s.app === 'gmail' || s.app === 'calendar') && typeof s.url === 'string' && s.url.startsWith('https://')) {
+    return {
+      source: {
+        app: s.app,
+        url: s.url,
+        ...(typeof s.id === 'string' && s.id ? { id: s.id } : {}),
+        ...(s.waiting === true ? { waiting: true } : {}),
+      },
+    }
+  }
   const legacy = typeof r.notes === 'string' ? r.notes.match(/^(Gmail|Google Calendar) · [^\n]*\n(https:\/\/\S+)$/) : null
   if (legacy) return { source: { app: legacy[1] === 'Gmail' ? 'gmail' : 'calendar', url: legacy[2] }, notes: '' }
   return {}
@@ -44,6 +53,7 @@ export function sanitize(input: unknown): Task[] {
       priority: r.priority === true,
       repeat: REPEATS.includes(r.repeat as Repeat) ? (r.repeat as Repeat) : null,
       ...readSource(r),
+      snooze: sanitizeSnooze(r.snooze),
     })
   }
   const byId = new Map(tasks.map((t) => [t.id, t]))
@@ -60,6 +70,15 @@ export function sanitize(input: unknown): Task[] {
     }
   }
   return tasks
+}
+
+const DAY = /^\d{4}-\d{2}-\d{2}$/
+
+function sanitizeSnooze(raw: unknown): Snooze | null {
+  const s = raw as Partial<Snooze> | null
+  return s && typeof s.until === 'string' && DAY.test(s.until) && typeof s.since === 'string' && DAY.test(s.since)
+    ? { until: s.until, since: s.since }
+    : null
 }
 
 export function parse(raw: string | null): Task[] {

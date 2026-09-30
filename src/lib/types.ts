@@ -22,11 +22,23 @@ export interface Task {
   repeat: Repeat | null
   /** Where the task came from (Recoger): the mail or event it opens. */
   source?: Source | null
+  /** Posponer: hidden (with its subtasks) until `until`; back at the top that day. */
+  snooze: Snooze | null
 }
 
 export interface Source {
   app: 'gmail' | 'calendar'
   url: string
+  /** Gmail thread id or Calendar event id, to read it again (older tasks: read from the url). */
+  id?: string
+  /** It came from a mail of mine still unanswered: a reply may close it. */
+  waiting?: boolean
+}
+
+/** Local dates (YYYY-MM-DD): hidden until `until`, postponed on `since`. */
+export interface Snooze {
+  until: string
+  since: string
 }
 
 /** `weekly` keeps the weekday of its date; `monthly` its day of the month. */
