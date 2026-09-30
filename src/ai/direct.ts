@@ -59,10 +59,11 @@ export async function ask<T extends ToolName>({ tool, request, context, onPartia
       buffer = lines.pop() ?? ''
       for (const line of lines) {
         if (!line.startsWith('data:')) continue
-        const event = JSON.parse(line.slice(5)) as {
-          type: string
-          delta?: { type: string; partial_json?: string }
-          error?: { message?: string }
+        let event: { type: string; delta?: { type: string; partial_json?: string }; error?: { message?: string } }
+        try {
+          event = JSON.parse(line.slice(5))
+        } catch {
+          throw new Error('La respuesta de la IA llegó cortada. Vuelve a pedirlo')
         }
         if (event.type === 'error') throw new Error(event.error?.message ?? 'Anthropic falló')
         if (event.delta?.type !== 'input_json_delta' || !event.delta.partial_json) continue

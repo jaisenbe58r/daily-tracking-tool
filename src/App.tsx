@@ -202,7 +202,10 @@ export default function App() {
     requestAnimationFrame(() => {
       // Only if nothing else claimed focus in the meantime (e.g. ⌘F right after Esc).
       const active = document.activeElement
-      if (!active || active === document.body) returnTo.current?.focus?.()
+      if (active && active !== document.body) return
+      // The row it came from may be gone (the AI replaced an empty sheet): land on the first task instead.
+      if (returnTo.current?.isConnected) returnTo.current.focus?.()
+      else document.querySelector<HTMLElement>('textarea[data-task-text]')?.focus()
     })
 
   const closeCapture = () => {
@@ -682,7 +685,8 @@ export default function App() {
                     job: ai.job,
                     onAsk: (text) => {
                       const request = seed.request && text === seed.text ? seed.request : text
-                      if (seed.mode === 'draft') void draftFor(seed.taskId, true, text === seed.text ? '' : text)
+                      // What's typed after the «Borrador: …» label is the extra instruction, not the label itself.
+                      if (seed.mode === 'draft') void draftFor(seed.taskId, true, (text.startsWith(seed.text) ? text.slice(seed.text.length) : text).trim())
                       else if (seed.mode === 'summary') openAi(seed.taskId, request, 'summary', text)
                       else void ai.ask(request, seed.taskId)
                     },
@@ -690,7 +694,9 @@ export default function App() {
                     onKey: ai.saveKey,
                     onAccept: () => {
                       const job = ai.job
-                      if (job?.phase === 'text') {
+                      if (job?.phase === 'text' && !job.text.trim()) {
+                        // Nothing was written: there's nothing to copy.
+                      } else if (job?.phase === 'text') {
                         const draft = seed.mode === 'draft'
                         const hasSource = draft && state.tasks.find((t) => t.id === seed.taskId)?.source
                         navigator.clipboard
@@ -704,7 +710,13 @@ export default function App() {
                           ai.cancel()
                           return
                         }
-                        dispatch({ type: 'apply', tasks: job.next })
+                        // Like a plain capture, what the AI adds keeps the active Hoy/tag filter, so it doesn't vanish on arrival.
+                        const inherit = inheritFromFilters(effective, todayKey)
+                        const before = new Set(job.base.map((t) => t.id))
+                        const next = job.next.map((t) =>
+                          before.has(t.id) ? t : { ...t, due: t.due ?? inherit.due ?? null, tags: [...new Set([...t.tags, ...(inherit.tags ?? [])])] },
+                        )
+                        dispatch({ type: 'apply', tasks: next })
                         notify(`${job.summary} · ${isMac ? '⌘' : 'Ctrl+'}Z deshace`)
                       } else return
                       ai.cancel()
