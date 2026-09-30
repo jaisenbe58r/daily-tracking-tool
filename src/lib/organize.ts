@@ -8,10 +8,9 @@ export const STATUS_LABEL: Record<Status, string> = { todo: 'Pendiente', doing: 
 export function matches(task: Task, filters: Filters, today: string): boolean {
   if (filters.hideDone && task.status === 'done') return false
   if (filters.tag && !task.tags.includes(filters.tag)) return false
-  // Every word must appear somewhere (text, notes or tags), in any order.
-  const words = fold(filters.query).split(/\s+/).filter(Boolean)
-  const haystack = words.length ? fold(`${task.text} ${task.notes} ${task.tags.join(' ')}`) : ''
-  if (words.some((w) => !haystack.includes(w.replace(/^#/, '')))) {
+  if (filters.ids) {
+    if (!filters.ids.includes(task.id)) return false
+  } else if (!matchesWords(task, filters.query)) {
     return false
   }
   if (filters.today) {
@@ -22,8 +21,15 @@ export function matches(task: Task, filters: Filters, today: string): boolean {
   return true
 }
 
+/** Every word must appear somewhere (text, notes or tags), in any order. */
+function matchesWords(task: Task, query: string): boolean {
+  const words = fold(query).split(/\s+/).filter(Boolean)
+  const haystack = words.length ? fold(`${task.text} ${task.notes} ${task.tags.join(' ')}`) : ''
+  return words.every((w) => haystack.includes(w.replace(/^#/, '')))
+}
+
 export function isFiltering(filters: Filters) {
-  return filters.hideDone || filters.today || filters.tag !== null || filters.query.trim() !== ''
+  return filters.hideDone || filters.today || filters.tag !== null || filters.query.trim() !== '' || Boolean(filters.ids)
 }
 
 /** What a new task needs so it stays visible under the active filters. */

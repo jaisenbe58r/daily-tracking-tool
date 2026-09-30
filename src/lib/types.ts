@@ -46,6 +46,8 @@ export interface Filters {
   today: boolean
   /** Instant search (Cmd/Ctrl+F) over text, notes and tags. Not remembered between visits. */
   query: string
+  /** Tasks the AI picked for `query` (search by meaning); replaces the word match. Never remembered. */
+  ids?: string[] | null
 }
 
 export interface Group {

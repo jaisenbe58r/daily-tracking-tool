@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { newTask } from '../lib/tree'
 import type { Task } from '../lib/types'
-import { applyOps, snapshot } from './ops'
+import { applyOps, idsFor, snapshot } from './ops'
 
 function sheet(): Task[] {
   const zimvie = { ...newTask(null, 'Proyecto ZimVie'), tags: ['zimvie'] }
@@ -84,5 +84,20 @@ describe('applyOps', () => {
     const blank = [newTask()]
     const { tasks: out } = applyOps(blank, [{ op: 'add', text: 'Revisar Captia.ai' }], new Map())
     expect(out.map((t) => t.text)).toEqual(['Revisar Captia.ai'])
+  })
+
+  it('plants the next occurrence when completing a recurring task', () => {
+    const daily = { ...newTask(null, 'Revisar alarmas'), repeat: 'daily' as const, due: '2026-09-30' }
+    const { refs } = snapshot([daily], '2026-09-30')
+    const { tasks: out } = applyOps([daily], [{ op: 'update', id: 't1', status: 'done' }], refs, '2026-09-30')
+    expect(out).toHaveLength(2)
+    expect(out[1]).toMatchObject({ text: 'Revisar alarmas', status: 'todo', due: '2026-10-01' })
+  })
+})
+
+describe('idsFor', () => {
+  it('maps refs to ids in order, skipping unknown and repeated ones', () => {
+    const refs = new Map([['t1', 'a'], ['t2', 'b']])
+    expect(idsFor(refs, ['t2', 't9', ' t1', 't2'])).toEqual(['b', 'a'])
   })
 })

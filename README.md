@@ -52,6 +52,13 @@ La IA trabaja por detrás de lo que ya existe, sin ventana de chat. Propone y t�
 - **Volcado**: en `Cmd/Ctrl+K`, escribe o pega algo desordenado («el jueves demo Captia, antes revisar alarmas ZimVie y validar el torno 04») y pulsa `Cmd/Ctrl+Enter`. Sale un árbol con subtareas, tags y fechas. `Enter` sigue apuntando la línea tal cual, sin IA.
 - **Órdenes**: en la misma línea, «mueve lo de ZimVie a mañana y márcalo #urgente», «completa lo de Copilot». Si abres `Cmd/Ctrl+K` desde una tarea, «esta» es esa tarea.
 - **Dividir en pasos**: en `/`, «Dividir en pasos» propone de 3 a 6 subtareas. «Pedir a la IA…» abre la línea sobre esa tarea.
+- **Plan del día** (`Alt+P`, o en `/`): propone como mucho 3 tareas para hoy, con prioridad, entre lo vencido, lo arrastrado y lo que está en curso.
+- **Resumen redactado** (`Alt+Shift+R`, o en `/`): el resumen del día en frases, para un chat o un correo. `Enter` lo copia. (`Alt+R` sigue copiando el Markdown literal, sin IA.)
+- **Buscar por significado**: en `Cmd/Ctrl+F`, si las palabras no encuentran nada, `Cmd/Ctrl+Enter` pide a la IA las tareas que encajan («lo de la máquina» → «Validar torno 04»). Escribir de nuevo vuelve a la búsqueda normal.
+
+Las propuestas se van dibujando mientras llegan. En pantallas táctiles, «IA», «aplicar», «copiar» y «descartar» son botones, y a la IA se llega desde `/` → «Pedir a la IA…».
+
+**Dictado**: donde el navegador lo permite (Chrome, Edge, Safari), la línea de `Cmd/Ctrl+K` tiene un micrófono (`Alt+V`). Usa el reconocimiento de voz del propio navegador, no la IA, y funciona aunque no haya clave.
 
 Solo se envía algo al modelo cuando lo pides: tu petición y una lista compacta de las tareas (texto, estado, tags, fecha). Nada en segundo plano.
 
@@ -64,7 +71,7 @@ npm run dev
 
 Sin clave, la app funciona igual y las acciones de IA no aparecen. `AI_MODEL` cambia el modelo (por defecto `anthropic/claude-haiku-4-5`; también vale `openai/...` o `google/...` con su clave).
 
-**Cómo está hecho**: [CopilotKit](https://github.com/CopilotKit/CopilotKit) v2 sin su UI de chat. En el navegador, `src/ai/` usa el núcleo de CopilotKit (cargado solo al primer uso) con una herramienta de frontend, `propose_changes`, cuyas operaciones (`add`, `update`, `move`, `remove`) se aplican con las mismas funciones del árbol que usa el teclado (`src/ai/ops.ts`). En el servidor, `server/ai.ts` es el runtime de CopilotKit con un `BuiltInAgent` obligado a responder siempre con esa herramienta; Vite lo sirve en `/api/ai` en `dev` y `preview`. Para publicarlo fuera de local, `createAiHandler()` devuelve un handler Fetch estándar que corre en Cloudflare Workers, Vercel, Netlify, Deno o Bun; si vive en otro dominio, `VITE_AI_URL` apunta la app a él.
+**Cómo está hecho**: [CopilotKit](https://github.com/CopilotKit/CopilotKit) v2 sin su UI de chat. En el navegador, `src/ai/` usa el núcleo de CopilotKit (cargado solo al primer uso) y las operaciones de `propose_changes` (`add`, `update`, `move`, `remove`) se aplican con las mismas funciones del árbol que usa el teclado (`src/ai/ops.ts`). Hay tres herramientas de frontend: `propose_changes` (cambios), `write_text` (textos) y `select_tasks` (búsqueda); cada petición obliga al agente a responder con una sola de ellas, y sus argumentos llegan en streaming. En el servidor, `server/ai.ts` es el runtime de CopilotKit con un `BuiltInAgent` que solo deja elegir desde el navegador cuál de esas herramientas usar; Vite lo sirve en `/api/ai` en `dev` y `preview`. Para publicarlo fuera de local, `createAiHandler()` devuelve un handler Fetch estándar que corre en Cloudflare Workers, Vercel, Netlify, Deno o Bun; si vive en otro dominio, `VITE_AI_URL` apunta la app a él.
 
 **App instalable y sin conexión**: la versión compilada (`npm run build`) se puede instalar desde el navegador y abre sin red; los datos ya viven en el propio navegador.
 

@@ -3,7 +3,7 @@ import { BoardView } from './components/BoardView'
 import { ListView } from './components/ListView'
 import type { QuickItem } from './components/QuickActions'
 import { QuickCapture } from './components/QuickCapture'
-import { SearchBar } from './components/SearchBar'
+import { SearchBar, type MeaningSearch } from './components/SearchBar'
 import { Toolbar } from './components/Toolbar'
 import { exportTasks, readBackup } from './lib/backup'
 import { allTags, inheritFromFilters, isFiltering, matches, organize } from './lib/organize'
@@ -20,6 +20,21 @@ const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigat
 const M = isMac ? '⌘' : 'Ctrl '
 const A = isMac ? '⌥' : 'Alt '
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
+/** What the capture line opens with: the task it's about (AI context), text to send at once, and what kind of answer. */
+interface Seed {
+  taskId: string | null
+  /** Shown in the line. */
+  text: string
+  mode: 'changes' | 'summary'
+  /** Sent instead of `text` while the line still shows it (a short label for a long instruction). */
+  request?: string
+}
+
+const PLAN_REQUEST =
+  'Planifica mi día: elige como máximo 3 tareas abiertas que más importen hoy (vencidas, arrastradas, en curso o prioritarias) y ponles fecha de hoy y prioridad. No toques el resto.'
+const SUMMARY_REQUEST =
+  'Redacta el resumen de mi día para compartirlo con el equipo: qué he cerrado, qué sigue en curso y qué queda para mañana. Breve, en frases, sin inventar nada.'
+
 const todayFmt = new Intl.DateTimeFormat('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })
 
 export default function App() {
@@ -39,11 +54,15 @@ export default function App() {
   const { templates, save: saveTemplate, remove: removeTemplate, replaceAll: replaceTemplates } = useTemplates()
   const [capturing, setCapturing] = useState(false)
   /** What the capture line opens with: the task it's about (AI context) and any text to send right away. */
-  const [seed, setSeed] = useState<{ taskId: string | null; text: string }>({ taskId: null, text: '' })
+  const [seed, setSeed] = useState<Seed>({ taskId: null, text: '', mode: 'changes' })
   const [searching, setSearching] = useState(false)
   const [focusId, setFocusId] = useState<string | null>(null)
   const todayKey = dateKey(today)
   const ai = useAi(state.tasks, todayKey)
+  const aiReady = useRef(false)
+  useEffect(() => {
+    aiReady.current = ai.available
+  }, [ai.available])
 
   // Latest values for handlers registered once.
   const latest = useRef({ tasks: state.tasks, templates, focusId, todayKey })
@@ -99,9 +118,35 @@ export default function App() {
       .catch(() => notify('No se pudo copiar el resumen'))
   }, [notify])
 
+  const [meaning, setMeaning] = useState<MeaningSearch>('idle')
+  const meaningRun = useRef<AbortController | null>(null)
+  /** A new query (or none) drops what the AI found for the old one. */
+  const setQuery = (query: string) => {
+    meaningRun.current?.abort()
+    setMeaning('idle')
+    setPrefs((p) => ({ ...p, filters: { ...p.filters, query, ids: null } }))
+  }
+  const searchByMeaning = () => {
+    const query = filters.query.trim()
+    if (!query) return
+    meaningRun.current?.abort()
+    const ctrl = new AbortController()
+    meaningRun.current = ctrl
+    setMeaning('searching')
+    ai.search(query, ctrl.signal).then(
+      (ids) => {
+        if (ctrl.signal.aborted) return
+        setMeaning('found')
+        setPrefs((p) => ({ ...p, filters: { ...p.filters, ids } }))
+        // A row that reappears may take focus back (it was the last one edited); the search keeps it.
+        requestAnimationFrame(() => document.getElementById('search')?.focus())
+      },
+      () => !ctrl.signal.aborted && setMeaning('failed'),
+    )
+  }
   const closeSearch = () => {
     setSearching(false)
-    setPrefs((p) => ({ ...p, filters: { ...p.filters, query: '' } }))
+    setQuery('')
   }
   const searchResults = filters.query.trim()
     ? view === 'list'
@@ -140,16 +185,23 @@ export default function App() {
     setFocusId((cur) => (cur && (cur === id || !id) ? null : id))
   }, [])
 
-  const { ask } = ai
-  /** Opens the capture line about a task; with `request`, asks the AI at once. */
+  const { ask, write } = ai
+  /** Opens the capture line (about a task, if any); with `request`, asks the AI at once. */
   const openAi = useCallback(
-    (taskId: string, request = '') => {
-      returnTo.current = null
-      setSeed({ taskId, text: request })
+    (taskId: string | null, request = '', mode: Seed['mode'] = 'changes', label = request) => {
+      returnTo.current = taskId ? null : (document.activeElement as HTMLElement | null)
+      setSeed({ taskId, text: label, mode, request })
       setCapturing(true)
-      if (request) void ask(request, taskId)
+      if (!request) return
+      if (mode === 'summary') void write(request, `Resumen literal del día:\n${dailySummary(latest.current.tasks, latest.current.todayKey)}`)
+      else void ask(request, taskId)
     },
-    [ask],
+    [ask, write],
+  )
+  const planDay = useCallback((taskId: string | null) => openAi(taskId, PLAN_REQUEST, 'changes', 'Planificar el día'), [openAi])
+  const writeSummary = useCallback(
+    (taskId: string | null) => openAi(taskId, SUMMARY_REQUEST, 'summary', 'Resumen del día'),
+    [openAi],
   )
 
   const extraActions = useCallback(
@@ -161,9 +213,11 @@ export default function App() {
           ? [
               ...(name
                 ? [{ label: 'Dividir en pasos', hint: 'IA', keywords: 'ia ai split dividir descomponer subtareas pasos', run: () =>
-                    openAi(taskId, `Divide en pasos la tarea seleccionada: «${name}»`) }]
+                    openAi(taskId, `Divide en pasos la tarea seleccionada: «${name}»`, 'changes', `Dividir en pasos: ${name}`) }]
                 : []),
               { label: 'Pedir a la IA…', hint: 'IA', keywords: 'ia ai pedir orden cambiar', run: () => openAi(taskId) },
+              { label: 'Planificar el día', hint: `${A}P`, keywords: 'ia ai plan planificar hoy prioridades', run: () => planDay(taskId) },
+              { label: 'Redactar resumen del día', hint: `${A}⇧R`, keywords: 'ia ai resumen redactar standup correo', run: () => writeSummary(taskId) },
             ]
           : []),
         { label: focusId === taskId ? 'Salir del foco' : 'Modo foco', hint: `${A}F`, keywords: 'foco focus concentrar', run: () => toggleFocusMode(taskId) },
@@ -195,7 +249,7 @@ export default function App() {
         { label: 'Importar copia', hint: `${M}O`, keywords: 'backup json abrir cargar restaurar', run: openImport },
       ]
     },
-    [state.tasks, templates, focusId, toggleFocusMode, saveTemplate, removeTemplate, notify, dispatch, copySummary, exportAll, openImport, ai.available, openAi],
+    [state.tasks, templates, focusId, toggleFocusMode, saveTemplate, removeTemplate, notify, dispatch, copySummary, exportAll, openImport, ai.available, openAi, planDay, writeSummary],
   )
 
   const setView = useCallback((v: View) => setPrefs((p) => ({ ...p, view: v })), [setPrefs])
@@ -218,7 +272,7 @@ export default function App() {
         } else if (key === 'k') {
           e.preventDefault()
           returnTo.current = document.activeElement as HTMLElement | null
-          setSeed({ taskId: activeTaskId(), text: '' })
+          setSeed({ taskId: activeTaskId(), text: '', mode: 'changes' })
           setCapturing(true)
         } else if (key === 'f') {
           e.preventDefault()
@@ -240,9 +294,15 @@ export default function App() {
       } else if (e.altKey && e.code === 'KeyF') {
         e.preventDefault()
         toggleFocusMode(activeTaskId())
+      } else if (e.altKey && e.shiftKey && e.code === 'KeyR' && aiReady.current) {
+        e.preventDefault()
+        writeSummary(activeTaskId())
       } else if (e.altKey && e.code === 'KeyR') {
         e.preventDefault()
         copySummary()
+      } else if (e.altKey && e.code === 'KeyP' && aiReady.current) {
+        e.preventDefault()
+        planDay(activeTaskId())
       }
     }
     // Dropping a backup file anywhere on the page imports it.
@@ -263,7 +323,7 @@ export default function App() {
       window.removeEventListener('dragover', onDragOver)
       window.removeEventListener('drop', onDrop)
     }
-  }, [dispatch, setView, setPrefs, exportAll, openImport, importFile, toggleFocusMode, copySummary])
+  }, [dispatch, setView, setPrefs, exportAll, openImport, importFile, toggleFocusMode, copySummary, planDay, writeSummary])
 
   // Keep the heading right when the tab stays open past midnight.
   useEffect(() => {
@@ -306,9 +366,10 @@ export default function App() {
               <SearchBar
                 query={filters.query}
                 results={searchResults}
-                onChange={(query) => setPrefs((p) => ({ ...p, filters: { ...p.filters, query } }))}
+                onChange={setQuery}
                 onClose={closeSearch}
                 onEnter={jumpToFirstResult}
+                meaning={ai.available ? { state: meaning, onAsk: searchByMeaning } : null}
               />
             )}
             <Toolbar
@@ -379,18 +440,29 @@ export default function App() {
               ai.available
                 ? {
                     job: ai.job,
-                    onAsk: (text) => void ai.ask(text, seed.taskId),
+                    onAsk: (text) => {
+                      const request = seed.request && text === seed.text ? seed.request : text
+                      if (seed.mode === 'summary') openAi(seed.taskId, request, 'summary', text)
+                      else void ai.ask(request, seed.taskId)
+                    },
                     onCancel: ai.cancel,
-                    onApply: () => {
-                      if (ai.job?.phase !== 'proposal') return
-                      // Another tab (or undo) changed the sheet meanwhile: applying would overwrite it.
-                      if (ai.job.base !== state.tasks) {
-                        notify('La hoja ha cambiado. Vuelve a pedirlo con ' + (isMac ? '⌘↵' : 'Ctrl+↵'))
-                        ai.cancel()
-                        return
-                      }
-                      dispatch({ type: 'apply', tasks: ai.job.next })
-                      notify(`${ai.job.summary} · ${isMac ? '⌘' : 'Ctrl+'}Z deshace`)
+                    onAccept: () => {
+                      const job = ai.job
+                      if (job?.phase === 'text') {
+                        navigator.clipboard
+                          ?.writeText(job.text)
+                          .then(() => notify('Resumen copiado'))
+                          .catch(() => notify('No se pudo copiar el resumen'))
+                      } else if (job?.phase === 'proposal') {
+                        // Another tab (or undo) changed the sheet meanwhile: applying would overwrite it.
+                        if (job.base !== state.tasks) {
+                          notify('La hoja ha cambiado. Vuelve a pedirlo con ' + (isMac ? '⌘↵' : 'Ctrl+↵'))
+                          ai.cancel()
+                          return
+                        }
+                        dispatch({ type: 'apply', tasks: job.next })
+                        notify(`${job.summary} · ${isMac ? '⌘' : 'Ctrl+'}Z deshace`)
+                      } else return
                       ai.cancel()
                       setCapturing(false)
                       closeCapture()

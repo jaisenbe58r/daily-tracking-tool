@@ -1,6 +1,7 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { AiJob } from '../ai/useAi'
 import type { Change } from '../ai/ops'
+import { dictation, type Dictation } from '../ai/voice'
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
 const M = isMac ? '⌘' : 'Ctrl'
@@ -8,7 +9,8 @@ const M = isMac ? '⌘' : 'Ctrl'
 export interface AiControls {
   job: AiJob | null
   onAsk: (text: string) => void
-  onApply: () => void
+  /** Enter on an answer: apply a proposal, copy a text. */
+  onAccept: () => void
   onCancel: () => void
 }
 
@@ -23,19 +25,57 @@ interface Props {
 /**
  * Cmd/Ctrl+K from anywhere: one floating line, Enter saves, and focus goes back
  * to where it was. The capture grammar (#tag, !, mañana) applies here too.
- * With AI, Cmd/Ctrl+Enter sends the line to the agent instead and the answer
- * comes back as a preview under the line: Enter applies it, Esc drops it.
+ * With AI, Cmd/Ctrl+Enter (or tapping «IA») sends the line to the agent
+ * instead and the answer comes back as a preview under the line, growing as
+ * it streams: Enter applies it, Esc drops it.
  */
 export function QuickCapture({ onCapture, onClose, ai, initialText = '' }: Props) {
   const [text, setText] = useState(initialText)
+  const [listening, setListening] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const mic = useRef<Dictation | null>(null)
   useLayoutEffect(() => inputRef.current?.focus(), [])
+  useEffect(() => () => mic.current?.stop(), [])
   const job = ai?.job ?? null
+  const canDictate = typeof window !== 'undefined' && dictation.supported()
 
   const close = () => {
+    mic.current?.stop()
     ai?.onCancel()
     onClose()
   }
+  const askAi = () => {
+    if (!ai || !text.trim()) return
+    mic.current?.stop()
+    ai.onAsk(text.trim())
+    inputRef.current?.focus()
+  }
+  const accept = () => {
+    if (job?.phase === 'proposal' && !job.changes.length) close()
+    else ai?.onAccept()
+  }
+  const toggleMic = () => {
+    if (mic.current) {
+      mic.current.stop()
+      return
+    }
+    // Dictation adds to what's already typed, so a thought can be spoken in pieces.
+    const before = text.trim()
+    mic.current = dictation.start({
+      onText: (heard) => {
+        setText(before ? `${before} ${heard}` : heard)
+        if (job) ai?.onCancel()
+      },
+      onEnd: () => {
+        mic.current = null
+        setListening(false)
+        inputRef.current?.focus()
+      },
+    })
+    setListening(Boolean(mic.current))
+  }
+
+  const answered = job?.phase === 'proposal' || job?.phase === 'text'
 
   return (
     <div className="qa-backdrop capture-backdrop" onPointerDown={close}>
@@ -48,6 +88,7 @@ export function QuickCapture({ onCapture, onClose, ai, initialText = '' }: Props
           value={text}
           placeholder={ai ? `Apunta una tarea…   o pídeselo a la IA con ${M}↵` : 'Apunta una tarea…   #tag   !   mañana'}
           autoComplete="off"
+          enterKeyHint={answered ? 'done' : 'enter'}
           onChange={(e) => {
             setText(e.target.value)
             // Editing the request drops the answer to the old one.
@@ -57,37 +98,75 @@ export function QuickCapture({ onCapture, onClose, ai, initialText = '' }: Props
             const mod = isMac ? e.metaKey : e.ctrlKey
             if (e.key === 'Enter' && mod && ai && text.trim()) {
               e.preventDefault()
-              ai.onAsk(text.trim())
-            } else if (e.key === 'Enter' && job?.phase === 'proposal') {
+              askAi()
+            } else if (e.key === 'Enter' && answered) {
               e.preventDefault()
-              if (job.changes.length) ai?.onApply()
-              else close()
+              accept()
             } else if (e.key === 'Enter' && !job && text.trim()) {
               e.preventDefault()
+              mic.current?.stop()
               onCapture(text)
             } else if (e.key === 'Escape') {
               e.preventDefault()
               close()
+            } else if (e.altKey && e.code === 'KeyV' && canDictate) {
+              e.preventDefault()
+              toggleMic()
             }
           }}
         />
+        {canDictate && (
+          <button
+            type="button"
+            className="capture-mic"
+            aria-pressed={listening}
+            aria-label={listening ? 'Parar el dictado' : 'Dictar'}
+            title={`Dictar (${isMac ? '⌥' : 'Alt+'}V)`}
+            onClick={toggleMic}
+          >
+            <svg width="12" height="14" viewBox="0 0 12 14" aria-hidden>
+              <rect x="3.5" y="0.75" width="5" height="8" rx="2.5" fill="none" stroke="currentColor" strokeWidth="1.2" />
+              <path d="M1.5 6.5a4.5 4.5 0 0 0 9 0M6 11v2.5" fill="none" stroke="currentColor" strokeWidth="1.2" />
+            </svg>
+          </button>
+        )}
         {ai && !job && text.trim() ? (
-          <span className="capture-keys"><kbd>↵</kbd><kbd>{M}↵</kbd><span className="capture-ai">IA</span></span>
+          <span className="capture-keys">
+            <kbd>↵</kbd>
+            {/* A button too, so the AI is reachable on touch screens with no Cmd/Ctrl key. */}
+            <button type="button" className="capture-ai" onClick={askAi} title={`Pedírselo a la IA (${M}↵)`}>
+              <kbd>{M}↵</kbd> IA
+            </button>
+          </span>
         ) : (
           !job && <kbd>↵</kbd>
         )}
-        {job && <AiPanel job={job} />}
+        {job && <AiPanel job={job} onAccept={accept} onClose={close} onRetry={askAi} />}
       </div>
     </div>
   )
 }
 
-function AiPanel({ job }: { job: AiJob }) {
+interface PanelProps {
+  job: AiJob
+  onAccept: () => void
+  onClose: () => void
+  onRetry: () => void
+}
+
+function AiPanel({ job, onAccept, onClose, onRetry }: PanelProps) {
+  const esc = (label: string) => (
+    <button type="button" className="capture-act" onClick={onClose}>
+      <kbd>esc</kbd> {label}
+    </button>
+  )
   if (job.phase === 'thinking') {
     return (
       <div className="capture-panel" role="status" aria-live="polite">
         <span className="ai-thinking">Pensando</span>
-        <span className="capture-foot"><kbd>esc</kbd> cancelar</span>
+        {job.changes && <Changes changes={job.changes} />}
+        {job.text && <p className="ai-prose">{job.text}</p>}
+        <span className="capture-foot">{esc('cancelar')}</span>
       </div>
     )
   }
@@ -95,22 +174,39 @@ function AiPanel({ job }: { job: AiJob }) {
     return (
       <div className="capture-panel" role="alert">
         <span className="ai-summary">{job.message}</span>
-        <span className="capture-foot"><kbd>{M}↵</kbd> reintentar <kbd>esc</kbd> cerrar</span>
+        <span className="capture-foot">
+          <button type="button" className="capture-act" onClick={onRetry}>
+            <kbd>{M}↵</kbd> reintentar
+          </button>
+          {esc('cerrar')}
+        </span>
+      </div>
+    )
+  }
+  if (job.phase === 'text') {
+    return (
+      <div className="capture-panel" role="status" aria-live="polite">
+        <p className="ai-prose">{job.text}</p>
+        <span className="capture-foot">
+          <button type="button" className="capture-act" onClick={onAccept}>
+            <kbd>↵</kbd> copiar
+          </button>
+          {esc('cerrar')}
+        </span>
       </div>
     )
   }
   return (
     <div className="capture-panel" role="status" aria-live="polite">
       <span className="ai-summary">{job.summary}</span>
-      {job.changes.length > 0 && (
-        <ul className="ai-changes">
-          {job.changes.map((c, i) => (
-            <ChangeLine key={i} change={c} />
-          ))}
-        </ul>
-      )}
+      {job.changes.length > 0 && <Changes changes={job.changes} />}
       <span className="capture-foot">
-        {job.changes.length ? <><kbd>↵</kbd> aplicar <kbd>esc</kbd> descartar</> : <><kbd>esc</kbd> cerrar</>}
+        {job.changes.length > 0 && (
+          <button type="button" className="capture-act" onClick={onAccept}>
+            <kbd>↵</kbd> aplicar
+          </button>
+        )}
+        {esc(job.changes.length ? 'descartar' : 'cerrar')}
       </span>
     </div>
   )
@@ -118,13 +214,19 @@ function AiPanel({ job }: { job: AiJob }) {
 
 const MARK: Record<Change['kind'], string> = { add: '+', update: '~', done: '✓', move: '→', remove: '−' }
 
-function ChangeLine({ change }: { change: Change }) {
-  const detail = 'detail' in change ? change.detail : ''
+function Changes({ changes }: { changes: Change[] }) {
   return (
-    <li className="ai-change" data-kind={change.kind} style={change.kind === 'add' ? { paddingLeft: change.depth * 20 } : undefined}>
-      <span className="ai-mark" aria-hidden>{MARK[change.kind]}</span>
-      <span className="ai-text">{change.text}</span>
-      {detail && <span className="ai-detail">{detail}</span>}
-    </li>
+    <ul className="ai-changes">
+      {changes.map((c, i) => {
+        const detail = 'detail' in c ? c.detail : ''
+        return (
+          <li key={i} className="ai-change" data-kind={c.kind} style={c.kind === 'add' ? { paddingLeft: c.depth * 20 } : undefined}>
+            <span className="ai-mark" aria-hidden>{MARK[c.kind]}</span>
+            <span className="ai-text">{c.text}</span>
+            {detail && <span className="ai-detail">{detail}</span>}
+          </li>
+        )
+      })}
+    </ul>
   )
 }

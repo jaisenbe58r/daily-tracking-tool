@@ -661,7 +661,30 @@ textarea::placeholder { color: color-mix(in srgb, var(--grey) 60%, var(--paper))
 .capture-input::placeholder { color: color-mix(in srgb, var(--grey) 60%, var(--paper)); }
 
 .capture-keys { display: flex; align-items: center; gap: 6px; }
-.capture-ai { font-family: var(--mono); font-size: 11px; letter-spacing: 0.15em; color: var(--grey); }
+.capture-ai, .search-ai {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  color: var(--grey);
+  white-space: nowrap;
+}
+.capture-ai:hover, .search-ai:hover, .capture-act:hover, .capture-mic:hover { color: var(--ink); }
+.capture-mic {
+  display: grid;
+  place-items: center;
+  flex: 0 0 24px;
+  height: 24px;
+  border-radius: 4px;
+  color: var(--grey);
+}
+/* Listening: the one moment the mic needs to be seen. */
+.capture-mic[aria-pressed='true'] { background: var(--ink); color: var(--paper); }
+.capture-act { display: inline-flex; align-items: center; gap: 6px; font: inherit; color: inherit; }
+.capture-act + .capture-act { margin-left: 10px; }
+.ai-prose { margin: 0; font-size: 14px; line-height: 22px; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* AI answer: a preview under the capture line, applied with Enter. */
 .capture-panel {
@@ -825,4 +848,10 @@ kbd {
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+
+/* Touch: the AI buttons stand in for Cmd/Ctrl+Enter, Enter and Esc, so they need room for a finger. */
+@media (pointer: coarse) {
+  .capture-act, .capture-ai, .search-ai { min-height: 36px; }
+  .capture-mic { flex-basis: 36px; height: 36px; }
 }

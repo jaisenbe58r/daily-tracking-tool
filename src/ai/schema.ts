@@ -24,3 +24,14 @@ export const proposalSchema = z.object({
   ),
 }) satisfies z.ZodType<Proposal>
 
+
+/** `write_text`: prose for the user (the day's summary), shown and copied as is. */
+export const textSchema = z.object({
+  text: z.string().describe('El texto final, listo para pegar'),
+})
+
+/** `select_tasks`: the tasks that answer a search by meaning. */
+export const selectionSchema = z.object({
+  ids: z.array(z.string()).describe('Refs (t3) de las tareas que encajan, de más a menos relevante'),
+  summary: z.string().describe('Una frase corta sobre lo encontrado'),
+})
