@@ -75,8 +75,6 @@ Sin clave, la app funciona igual y las acciones de IA no aparecen. `AI_MODEL` ca
 
 **App instalable y sin conexión**: la versión compilada (`npm run build`) se puede instalar desde el navegador y abre sin red; los datos ya viven en el propio navegador.
 
-**Modo oscuro**: sigue al del sistema, sin ajustes.
-
 ## Teclado
 
 | Tecla | Acción |
