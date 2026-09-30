@@ -30,6 +30,8 @@ export interface QuickItem {
   searchOnly?: boolean
   /** Keeps the menu open (it switches to a second list, like the dates for Posponer). */
   stay?: boolean
+  /** Opens a second list that has to be fetched first (today's meetings, say). */
+  list?: { title: string; empty: string; load: () => Promise<QuickItem[]> }
 }
 
 /** Second lists: the day to postpone to, plain or waiting on someone. */
@@ -52,6 +54,8 @@ export function QuickActions({ task, hasChildren, anchor, dispatch, extra, onClo
   const [query, setQuery] = useState('')
   const [active, setActive] = useState(0)
   const [sub, setSub] = useState<SubMenu | null>(initialSub)
+  /** A fetched second list: null items while it loads. */
+  const [picker, setPicker] = useState<{ title: string; empty: string; items: Item[] | null } | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const id = task.id
   const today = useToday()
@@ -164,7 +168,9 @@ export function QuickActions({ task, hasChildren, anchor, dispatch, extra, onClo
   }, [sub, query, today, id, dispatch, notify])
 
   const q = query.trim().toLowerCase()
-  const filtered = sub
+  const filtered = picker
+    ? (picker.items ?? []).filter((i) => !q || i.label.toLowerCase().includes(q))
+    : sub
     ? subItems
     : q
       ? items.filter((i) => `${i.label} ${i.keywords ?? ''}`.toLowerCase().includes(q))
@@ -176,8 +182,19 @@ export function QuickActions({ task, hasChildren, anchor, dispatch, extra, onClo
 
   const run = (item: Item | undefined) => {
     if (!item) return
+    if (item.list) {
+      const { title, empty, load } = item.list
+      setPicker({ title, empty, items: null })
+      setQuery('')
+      setActive(0)
+      load().then(
+        (items) => setPicker((p) => (p && p.title === title ? { ...p, items } : p)),
+        () => setPicker((p) => (p && p.title === title ? { ...p, items: [], empty: 'No se pudo leer' } : p)),
+      )
+      return
+    }
     // Chosen from the menu: name its key, the first few times.
-    if (!sub && isShortcut(item.hint)) teach(item.label, item.hint)
+    if (!sub && !picker && isShortcut(item.hint)) teach(item.label, item.hint)
     if (!item.stay) onClose(false)
     item.run()
   }
@@ -188,17 +205,19 @@ export function QuickActions({ task, hasChildren, anchor, dispatch, extra, onClo
   return (
     <div className="qa-backdrop" onPointerDown={() => onClose(true)}>
       <div className="qa" style={{ top, left }} onPointerDown={(e) => e.stopPropagation()} role="dialog" aria-label={sub ? (sub === 'wait' ? 'Esperando hasta' : 'Posponer hasta') : 'Acciones rápidas'}>
-        {sub && <div className="qa-title">{sub === 'wait' ? 'Esperando respuesta hasta' : 'Posponer hasta'}</div>}
+        {picker && <div className="qa-title">{picker.title}</div>}
+        {!picker && sub && <div className="qa-title">{sub === 'wait' ? 'Esperando respuesta hasta' : 'Posponer hasta'}</div>}
         <input
           ref={inputRef}
           className="qa-input"
           value={query}
-          placeholder={sub ? 'lunes, 15/10, 3 días…' : 'Acción…'}
+          placeholder={picker ? 'Buscar…' : sub ? 'lunes, 15/10, 3 días…' : 'Acción…'}
           onChange={(e) => { setQuery(e.target.value); setActive(0) }}
           onKeyDown={(e) => {
             if (e.key === 'ArrowDown') { e.preventDefault(); setActive((current + 1) % Math.max(filtered.length, 1)) }
             else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((current - 1 + filtered.length) % Math.max(filtered.length, 1)) }
             else if (e.key === 'Enter') { e.preventDefault(); run(filtered[current]) }
+            else if ((e.key === 'Escape' || (e.key === 'Backspace' && !query)) && picker) { e.preventDefault(); setPicker(null); setQuery('') }
             else if ((e.key === 'Escape' || (e.key === 'Backspace' && !query)) && sub && !initialSub) { e.preventDefault(); openSub(null) }
             else if (e.key === 'Escape' || (e.key === 'Backspace' && !query)) { e.preventDefault(); onClose(true) }
           }}
@@ -206,7 +225,7 @@ export function QuickActions({ task, hasChildren, anchor, dispatch, extra, onClo
         <ul className="qa-list" role="listbox">
           {filtered.map((item, i) => (
             <li
-              key={item.label}
+              key={`${i}-${item.label}`}
               role="option"
               aria-selected={i === current}
               className="qa-item"
@@ -217,7 +236,11 @@ export function QuickActions({ task, hasChildren, anchor, dispatch, extra, onClo
               {item.hint && <kbd>{item.hint}</kbd>}
             </li>
           ))}
-          {!filtered.length && <li className="qa-empty">{sub ? 'Escribe un día: lunes, 15/10, 3 días…' : 'Sin resultados'}</li>}
+          {!filtered.length && (
+            <li className="qa-empty">
+              {picker ? (picker.items === null ? 'Leyendo…' : picker.empty) : sub ? 'Escribe un día: lunes, 15/10, 3 días…' : 'Sin resultados'}
+            </li>
+          )}
         </ul>
       </div>
     </div>

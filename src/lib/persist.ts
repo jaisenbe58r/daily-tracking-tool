@@ -1,4 +1,4 @@
-import type { Repeat, Snooze, Status, Task } from './types'
+import type { Repeat, Snooze, Source, Status, Task } from './types'
 import { newTask } from './tree'
 
 export const STORAGE_KEY = 'daily-tracking-tool:v1'
@@ -11,6 +11,25 @@ const REPEATS: Repeat[] = ['daily', 'weekdays', 'weekly', 'monthly']
  * drops duplicates and re-roots tasks whose parent no longer exists or that
  * form a cycle, so a bad write can never leave the sheet unusable.
  */
+/** Tasks from mail, calendar or meeting notes. The first version kept the link in the notes; it moves out of the way. */
+function readSource(r: Record<string, unknown>): Pick<Task, 'source'> & Partial<Pick<Task, 'notes'>> {
+  const s = r.source as Partial<Source> | null | undefined
+  if (s && (s.app === 'gmail' || s.app === 'calendar' || s.app === 'granola') && typeof s.url === 'string' && s.url.startsWith('https://')) {
+    return {
+      source: {
+        app: s.app,
+        url: s.url,
+        ...(typeof s.id === 'string' && s.id ? { id: s.id } : {}),
+        ...(s.waiting === true ? { waiting: true } : {}),
+        ...(typeof s.quote === 'string' && s.quote ? { quote: s.quote } : {}),
+      },
+    }
+  }
+  const legacy = typeof r.notes === 'string' ? r.notes.match(/^(Gmail|Google Calendar) · [^\n]*\n(https:\/\/\S+)$/) : null
+  if (legacy) return { source: { app: legacy[1] === 'Gmail' ? 'gmail' : 'calendar', url: legacy[2] }, notes: '' }
+  return {}
+}
+
 export function sanitize(input: unknown): Task[] {
   if (!Array.isArray(input)) return []
   const seen = new Set<string>()
@@ -34,6 +53,7 @@ export function sanitize(input: unknown): Task[] {
       due: typeof r.due === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.due) ? r.due : null,
       priority: r.priority === true,
       repeat: REPEATS.includes(r.repeat as Repeat) ? (r.repeat as Repeat) : null,
+      ...readSource(r),
       snooze: sanitizeSnooze(r.snooze),
     })
   }

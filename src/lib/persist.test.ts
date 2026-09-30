@@ -33,3 +33,17 @@ describe('persist', () => {
     expect(isUnreadable(null)).toBe(false)
   })
 })
+
+describe('source', () => {
+  it('keeps a valid source and moves the first version\'s link out of the notes', () => {
+    const [kept, legacy, plain] = sanitize([
+      { id: 'a', text: 'A', source: { app: 'gmail', url: 'https://mail.google.com/mail/#all/1' } },
+      { id: 'b', text: 'B', notes: 'Google Calendar · Kick-off\nhttps://www.google.com/calendar/event?eid=1' },
+      { id: 'c', text: 'C', notes: 'Llamar antes de las 10' },
+    ])
+    expect(kept.source).toEqual({ app: 'gmail', url: 'https://mail.google.com/mail/#all/1' })
+    expect(legacy).toMatchObject({ notes: '', source: { app: 'calendar', url: 'https://www.google.com/calendar/event?eid=1' } })
+    expect(plain).toMatchObject({ notes: 'Llamar antes de las 10' })
+    expect(plain.source).toBeUndefined()
+  })
+})

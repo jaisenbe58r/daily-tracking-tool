@@ -20,8 +20,21 @@ export interface Task {
   priority: boolean
   /** Recurring task: completing it plants the next occurrence right below. */
   repeat: Repeat | null
+  /** Where the task came from (Recoger): the mail, event or meeting note it opens. */
+  source?: Source | null
   /** Posponer: hidden (with its subtasks) until `until`; back at the top that day. */
   snooze: Snooze | null
+}
+
+export interface Source {
+  app: 'gmail' | 'calendar' | 'granola'
+  url: string
+  /** Gmail thread id, Calendar event id or Granola note id, to read it again (older tasks: read from the url). */
+  id?: string
+  /** Granola: the words in the note the task was taken from. */
+  quote?: string
+  /** It came from a mail of mine still unanswered: a reply may close it. */
+  waiting?: boolean
 }
 
 /** Local dates (YYYY-MM-DD): hidden until `until`, postponed on `since`. */
@@ -54,6 +67,8 @@ export interface Filters {
   today: boolean
   /** Instant search (Cmd/Ctrl+F) over text, notes and tags. Not remembered between visits. */
   query: string
+  /** Tasks the AI picked for `query` (search by meaning); replaces the word match. Never remembered. */
+  ids?: string[] | null
 }
 
 export interface Group {

@@ -1,5 +1,7 @@
-import type { Status, Task } from '../lib/types'
+import type { Source, Status, Task } from '../lib/types'
 import * as tree from '../lib/tree'
+import { dateKey } from '../lib/parse'
+import { plantNext } from '../lib/repeat'
 
 /** What the agent can propose. Validated by `proposalSchema` (schema.ts) before it gets here. */
 export interface Op {
@@ -17,6 +19,8 @@ export interface Op {
   due?: string | null
   priority?: boolean
   status?: Status
+  /** Set by the app, never by the model: the mail or event an added task came from. */
+  source?: Source
 }
 
 export interface Proposal {
@@ -48,7 +52,7 @@ export function snapshot(tasks: Task[], today: string, selectedId: string | null
         refs.set(ref, t.id)
         refOf.set(t.id, ref)
         const parent = t.parentId ? refOf.get(t.parentId) : undefined
-        const marks = [...t.tags.map((g) => `#${g}`), t.priority ? '!' : ''].filter(Boolean).join(' ')
+        const marks = [...t.tags.map((g) => `#${g}`), t.priority ? '!' : '', t.repeat ? `↻${t.repeat}` : ''].filter(Boolean).join(' ')
         lines.push([parent ? `${ref} < ${parent}` : ref, t.status, t.due ?? '-', marks || '-', t.text.trim()].join(' | '))
       }
       walk(t.id)
@@ -93,7 +97,12 @@ function describe(patch: Partial<Task>): string {
  * Applies a proposal to a copy of the sheet. Ops that point at tasks that don't
  * exist are skipped rather than failing the whole proposal.
  */
-export function applyOps(tasks: Task[], ops: Op[], refs: Map<string, string>): { tasks: Task[]; changes: Change[] } {
+export function applyOps(
+  tasks: Task[],
+  ops: Op[],
+  refs: Map<string, string>,
+  today = dateKey(new Date()),
+): { tasks: Task[]; changes: Change[] } {
   let out = tasks
   const ids = new Map(refs)
   const depthOf = new Map<string, number>()
@@ -112,13 +121,15 @@ export function applyOps(tasks: Task[], ops: Op[], refs: Map<string, string>): {
         tags: cleanTags(op.tags ?? []),
         due: validDue(op.due),
         priority: op.priority ?? false,
+        ...(op.source ? { source: op.source } : {}),
       }
       if (op.status) task = { ...task, ...withStatus(task, op.status) }
       out = tree.place(parentId ? tree.update(out, parentId, { collapsed: false }) : out, task, parentId, null)
       if (op.ref) ids.set(op.ref.trim(), task.id)
       const depth = parentId && depthOf.has(parentId) ? depthOf.get(parentId)! + 1 : 0
       depthOf.set(task.id, depth)
-      const detail = [task.tags.map((t) => `#${t}`).join(' '), task.due ?? '', task.priority ? '!' : ''].filter(Boolean).join(' ')
+      const from = task.source ? { gmail: 'gmail', calendar: 'agenda', granola: 'granola' }[task.source.app] : ''
+      const detail = [task.tags.map((t) => `#${t}`).join(' '), task.due ?? '', task.priority ? '!' : '', from].filter(Boolean).join(' ')
       changes.push({ kind: 'add', text, depth, detail })
       continue
     }
@@ -146,6 +157,8 @@ export function applyOps(tasks: Task[], ops: Op[], refs: Map<string, string>): {
       const status = op.status && op.status !== task.status ? op.status : undefined
       if (!Object.keys(patch).length && !status) continue
       out = tree.update(out, task.id, { ...patch, ...(status ? withStatus(task, status) : {}) })
+      // Same as completing by hand: a recurring task plants its next occurrence.
+      if (status === 'done') out = plantNext(out, task.id, today)
       if (status === 'done') changes.push({ kind: 'done', text: task.text })
       const detail = describe({ ...patch, ...(status && status !== 'done' ? { status } : {}) })
       if (detail) changes.push({ kind: 'update', text: task.text, detail })
@@ -155,4 +168,9 @@ export function applyOps(tasks: Task[], ops: Op[], refs: Map<string, string>): {
   const placeholder = tasks.length === 1 && !tasks[0].text.trim() ? tasks[0] : null
   if (placeholder && out.length > 1 && !tree.hasChildren(out, placeholder.id)) out = out.filter((t) => t.id !== placeholder.id)
   return { tasks: out, changes }
+}
+
+/** Task ids for the refs the agent picked (`t3`), in its order, skipping unknown ones. */
+export function idsFor(refs: Map<string, string>, picked: string[]): string[] {
+  return [...new Set(picked.map((r) => refs.get(r.trim())).filter((id): id is string => Boolean(id)))]
 }
