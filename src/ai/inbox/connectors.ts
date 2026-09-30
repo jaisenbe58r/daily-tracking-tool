@@ -135,11 +135,13 @@ function meetingsIn(payload: unknown): GranolaMeeting[] {
   return meetings
 }
 
-const isoDay = (ms: number) => new Date(ms).toISOString().slice(0, 10)
-
+/**
+ * Granola's list_meetings only takes this_week, last_week or last_30_days (no custom range),
+ * so ask for the widest one and keep the window here. A meeting without a readable date stays.
+ */
 async function listMeetings(m: Mcp, from: number, to: number): Promise<GranolaMeeting[]> {
-  const payload = (await m.callTool(GRANOLA, 'list_meetings', { time_range: 'custom', custom_start: isoDay(from), custom_end: isoDay(to) }, { cache: false })).payload
-  return meetingsIn(payload)
+  const payload = (await m.callTool(GRANOLA, 'list_meetings', { time_range: 'last_30_days' }, { cache: false })).payload
+  return meetingsIn(payload).filter((x) => Number.isNaN(x.at) || (x.at >= from && x.at <= to))
 }
 
 /** Notes (summary and the user's own) of these meetings, ten per call as Granola allows. */
@@ -247,7 +249,7 @@ export async function mailWith(people: string[], days = 45): Promise<GmailThread
 }
 
 /** Up to three earlier Granola notes with any of these people, newest first. Empty when Granola can't be read. */
-export async function notesWith(people: string[], before: number, days = 60): Promise<GranolaMeeting[]> {
+export async function notesWith(people: string[], before: number, days = 30): Promise<GranolaMeeting[]> {
   const m = await connectors()
   if (!m || !people.length) return []
   try {

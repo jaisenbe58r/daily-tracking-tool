@@ -175,7 +175,7 @@ describe('gather from Granola', () => {
     expect(got!.candidates.map((c) => c.title)).toEqual(['Visita Ubesol'])
     const read = calls.find((c) => c.tool === 'get_meetings')!
     expect(read.input).toEqual({ meeting_ids: ['0dba4400-50f1-4262-9ac7-89cd27b79371'] })
-    expect(calls.find((c) => c.tool === 'list_meetings')!.input).toEqual({ time_range: 'custom', custom_start: '2026-09-16', custom_end: '2026-10-01' })
+    expect(calls.find((c) => c.tool === 'list_meetings')!.input).toEqual({ time_range: 'last_30_days' })
   })
 
   it('an answer it cannot read is a problem, not "nothing new"', async () => {
