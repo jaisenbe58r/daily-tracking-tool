@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Task } from '../lib/types'
-import { probeAi } from './config'
+import { apiKey, probeAi, type AiMode } from './config'
 import { applyOps, idsFor, snapshot, type Change, type Op } from './ops'
 
 export type AiJob =
@@ -9,8 +9,11 @@ export type AiJob =
   | { phase: 'proposal'; request: string; summary: string; changes: Change[]; next: Task[]; base: Task[] }
   | { phase: 'text'; request: string; text: string }
   | { phase: 'error'; request: string; message: string }
+  /** Key mode with no key (or a refused one): the panel asks for it, then the request goes out. */
+  | { phase: 'key'; request: string; invalid: boolean }
 
 const message = (error: unknown) => (error instanceof Error ? error.message : 'La IA falló')
+const needsKey = (error: unknown): error is Error & { invalid: boolean } => error instanceof Error && error.name === 'NeedsKey'
 
 /** Only ops the model has finished enough to mean something. */
 const settled = (ops: Partial<Op>[] | undefined): Op[] =>
@@ -23,9 +26,13 @@ const settled = (ops: Partial<Op>[] | undefined): Op[] =>
  * sheet it was built on.
  */
 export function useAi(tasks: Task[], today: string) {
-  const [available, setAvailable] = useState(false)
+  const [mode, setMode] = useState<AiMode | null>(null)
+  const [hasKey, setHasKey] = useState(() => Boolean(apiKey.get()))
   const [job, setJob] = useState<AiJob | null>(null)
   const controller = useRef<AbortController | null>(null)
+  /** The request waiting on a key, sent again once the user gives one. */
+  const pending = useRef<(() => void) | null>(null)
+  const modeRef = useRef<AiMode>('server')
   const latest = useRef({ tasks, today })
   useEffect(() => {
     latest.current = { tasks, today }
@@ -33,11 +40,23 @@ export function useAi(tasks: Task[], today: string) {
 
   useEffect(() => {
     let live = true
-    void probeAi().then((ok) => live && setAvailable(ok))
+    void probeAi().then((found) => {
+      if (!live) return
+      if (found) modeRef.current = found
+      setMode(found)
+    })
     return () => {
       live = false
     }
   }, [])
+
+  const failed = (request: string, error: unknown, retry: () => void) => {
+    if (needsKey(error)) {
+      pending.current = retry
+      setHasKey(false)
+      setJob({ phase: 'key', request, invalid: error.invalid })
+    } else setJob({ phase: 'error', request, message: message(error) })
+  }
 
   const begin = () => {
     controller.current?.abort()
@@ -47,14 +66,14 @@ export function useAi(tasks: Task[], today: string) {
   }
 
   /** Changes to the sheet: capture, commands, /split, /plan. */
-  const ask = useCallback(async (request: string, selectedId: string | null = null) => {
+  const ask = useCallback(async function ask(request: string, selectedId: string | null = null) {
     const ctrl = begin()
     const base = latest.current.tasks
     const snap = snapshot(base, latest.current.today, selectedId)
     setJob({ phase: 'thinking', request })
     try {
       const { ask: run } = await import('./client')
-      const proposal = await run({
+      const proposal = await run(modeRef.current, {
         tool: 'propose_changes',
         request,
         context: snap.text,
@@ -68,18 +87,18 @@ export function useAi(tasks: Task[], today: string) {
       const { tasks: next, changes } = applyOps(base, proposal.ops, snap.refs, latest.current.today)
       setJob({ phase: 'proposal', request, summary: proposal.summary, changes, next, base })
     } catch (error) {
-      if (!ctrl.signal.aborted) setJob({ phase: 'error', request, message: message(error) })
+      if (!ctrl.signal.aborted) failed(request, error, () => void ask(request, selectedId))
     }
   }, [])
 
   /** Prose for the user (the day's summary). `extra` adds context the sheet alone doesn't say. */
-  const write = useCallback(async (request: string, extra = '') => {
+  const write = useCallback(async function write(request: string, extra = '') {
     const ctrl = begin()
     const snap = snapshot(latest.current.tasks, latest.current.today)
     setJob({ phase: 'thinking', request })
     try {
       const { ask: run } = await import('./client')
-      const { text } = await run({
+      const { text } = await run(modeRef.current, {
         tool: 'write_text',
         request,
         context: extra ? `${snap.text}\n\n${extra}` : snap.text,
@@ -88,7 +107,7 @@ export function useAi(tasks: Task[], today: string) {
       })
       if (!ctrl.signal.aborted) setJob({ phase: 'text', request, text })
     } catch (error) {
-      if (!ctrl.signal.aborted) setJob({ phase: 'error', request, message: message(error) })
+      if (!ctrl.signal.aborted) failed(request, error, () => void write(request, extra))
     }
   }, [])
 
@@ -96,15 +115,31 @@ export function useAi(tasks: Task[], today: string) {
   const search = useCallback(async (query: string, signal?: AbortSignal): Promise<string[]> => {
     const snap = snapshot(latest.current.tasks, latest.current.today)
     const { ask: run } = await import('./client')
-    const { ids } = await run({ tool: 'select_tasks', request: `Busca: ${query}`, context: snap.text, signal })
+    const { ids } = await run(modeRef.current, { tool: 'select_tasks', request: `Busca: ${query}`, context: snap.text, signal })
     return idsFor(snap.refs, ids)
   }, [])
 
   const cancel = useCallback(() => {
     controller.current?.abort()
     controller.current = null
+    pending.current = null
     setJob(null)
   }, [])
 
-  return { available, job, ask, write, search, cancel }
+  /** Keeps the key in this browser and sends the request that was waiting for it. */
+  const saveKey = useCallback((key: string) => {
+    apiKey.set(key)
+    setHasKey(true)
+    const retry = pending.current
+    pending.current = null
+    if (retry) retry()
+    else setJob(null)
+  }, [])
+
+  const forgetKey = useCallback(() => {
+    apiKey.clear()
+    setHasKey(false)
+  }, [])
+
+  return { available: mode !== null, mode, hasKey, job, ask, write, search, cancel, saveKey, forgetKey }
 }

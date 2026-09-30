@@ -59,6 +59,7 @@ export default function App() {
   const [focusId, setFocusId] = useState<string | null>(null)
   const todayKey = dateKey(today)
   const ai = useAi(state.tasks, todayKey)
+  const { mode: aiMode, hasKey: aiHasKey, forgetKey } = ai
   const aiReady = useRef(false)
   useEffect(() => {
     aiReady.current = ai.available
@@ -141,7 +142,12 @@ export default function App() {
         // A row that reappears may take focus back (it was the last one edited); the search keeps it.
         requestAnimationFrame(() => document.getElementById('search')?.focus())
       },
-      () => !ctrl.signal.aborted && setMeaning('failed'),
+      (error: unknown) => {
+        if (ctrl.signal.aborted) return
+        setMeaning('failed')
+        // Key mode with no key yet: the key is asked for where AI answers appear, in the capture line.
+        if (error instanceof Error && error.name === 'NeedsKey') notify(`Pon tu clave de Anthropic: ${M}K y luego ${M}↵`)
+      },
     )
   }
   const closeSearch = () => {
@@ -218,6 +224,13 @@ export default function App() {
               { label: 'Pedir a la IA…', hint: 'IA', keywords: 'ia ai pedir orden cambiar', run: () => openAi(taskId) },
               { label: 'Planificar el día', hint: `${A}P`, keywords: 'ia ai plan planificar hoy prioridades', run: () => planDay(taskId) },
               { label: 'Redactar resumen del día', hint: `${A}⇧R`, keywords: 'ia ai resumen redactar standup correo', run: () => writeSummary(taskId) },
+              ...(aiMode === 'key' && aiHasKey
+                ? [{ label: 'Olvidar la clave de la IA', keywords: 'ia ai clave key anthropic borrar olvidar', searchOnly: true, run: () => {
+                    forgetKey()
+                    notify('Clave de la IA borrada de este navegador')
+                    dispatch({ type: 'focus', id: taskId })
+                  } }]
+                : []),
             ]
           : []),
         { label: focusId === taskId ? 'Salir del foco' : 'Modo foco', hint: `${A}F`, keywords: 'foco focus concentrar', run: () => toggleFocusMode(taskId) },
@@ -249,7 +262,7 @@ export default function App() {
         { label: 'Importar copia', hint: `${M}O`, keywords: 'backup json abrir cargar restaurar', run: openImport },
       ]
     },
-    [state.tasks, templates, focusId, toggleFocusMode, saveTemplate, removeTemplate, notify, dispatch, copySummary, exportAll, openImport, ai.available, openAi, planDay, writeSummary],
+    [state.tasks, templates, focusId, toggleFocusMode, saveTemplate, removeTemplate, notify, dispatch, copySummary, exportAll, openImport, ai.available, aiMode, aiHasKey, forgetKey, openAi, planDay, writeSummary],
   )
 
   const setView = useCallback((v: View) => setPrefs((p) => ({ ...p, view: v })), [setPrefs])
@@ -446,6 +459,7 @@ export default function App() {
                       else void ai.ask(request, seed.taskId)
                     },
                     onCancel: ai.cancel,
+                    onKey: ai.saveKey,
                     onAccept: () => {
                       const job = ai.job
                       if (job?.phase === 'text') {

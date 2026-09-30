@@ -62,16 +62,22 @@ Las propuestas se van dibujando mientras llegan. En pantallas táctiles, «IA»,
 
 Solo se envía algo al modelo cuando lo pides: tu petición y una lista compacta de las tareas (texto, estado, tags, fecha). Nada en segundo plano.
 
-**Activarla en local**: crea `.env.local` con tu clave y arranca como siempre.
+**Cómo se activa**: la app elige sola la primera vía que funcione.
 
-```bash
-echo "ANTHROPIC_API_KEY=sk-ant-..." > .env.local
-npm run dev
-```
+1. **Con servidor** (la clave no sale de tu máquina): crea `.env.local` con tu clave y arranca como siempre.
 
-Sin clave, la app funciona igual y las acciones de IA no aparecen. `AI_MODEL` cambia el modelo (por defecto `anthropic/claude-haiku-4-5`; también vale `openai/...` o `google/...` con su clave).
+   ```bash
+   echo "ANTHROPIC_API_KEY=sk-ant-..." > .env.local
+   npm run dev
+   ```
 
-**Cómo está hecho**: [CopilotKit](https://github.com/CopilotKit/CopilotKit) v2 sin su UI de chat. En el navegador, `src/ai/` usa el núcleo de CopilotKit (cargado solo al primer uso) y las operaciones de `propose_changes` (`add`, `update`, `move`, `remove`) se aplican con las mismas funciones del árbol que usa el teclado (`src/ai/ops.ts`). Hay tres herramientas de frontend: `propose_changes` (cambios), `write_text` (textos) y `select_tasks` (búsqueda); cada petición obliga al agente a responder con una sola de ellas, y sus argumentos llegan en streaming. En el servidor, `server/ai.ts` es el runtime de CopilotKit con un `BuiltInAgent` que solo deja elegir desde el navegador cuál de esas herramientas usar; Vite lo sirve en `/api/ai` en `dev` y `preview`. Para publicarlo fuera de local, `createAiHandler()` devuelve un handler Fetch estándar que corre en Cloudflare Workers, Vercel, Netlify, Deno o Bun; si vive en otro dominio, `VITE_AI_URL` apunta la app a él.
+   `AI_MODEL` cambia el modelo (por defecto `anthropic/claude-haiku-4-5`; también vale `openai/...` o `google/...` con su clave).
+2. **Dentro de claude.ai** (la vista previa publicada como artifact): usa Claude con tu propia cuenta. No hace falta clave; claude.ai te pide permiso la primera vez.
+3. **Clave en el navegador** (una copia local o en un hosting estático, sin servidor): la primera vez que pides algo a la IA, la línea te pide tu clave de Anthropic. Se guarda solo en ese navegador (`localStorage`) y el navegador llama directamente a Anthropic. En `/`, «Olvidar la clave de la IA» la borra. `VITE_AI_MODEL` cambia el modelo (por defecto `claude-haiku-4-5`).
+
+Sin ninguna de las tres, la app funciona igual.
+
+**Cómo está hecho**: [CopilotKit](https://github.com/CopilotKit/CopilotKit) v2 sin su UI de chat. En el navegador, `src/ai/` usa el núcleo de CopilotKit (cargado solo al primer uso; `claude.ts` y `direct.ts` son las otras dos vías, con el mismo prompt de `src/ai/prompt.ts`) y las operaciones de `propose_changes` (`add`, `update`, `move`, `remove`) se aplican con las mismas funciones del árbol que usa el teclado (`src/ai/ops.ts`). Hay tres herramientas de frontend: `propose_changes` (cambios), `write_text` (textos) y `select_tasks` (búsqueda); cada petición obliga al agente a responder con una sola de ellas, y sus argumentos llegan en streaming. En el servidor, `server/ai.ts` es el runtime de CopilotKit con un `BuiltInAgent` que solo deja elegir desde el navegador cuál de esas herramientas usar; Vite lo sirve en `/api/ai` en `dev` y `preview`. Para publicarlo fuera de local, `createAiHandler()` devuelve un handler Fetch estándar que corre en Cloudflare Workers, Vercel, Netlify, Deno o Bun; si vive en otro dominio, `VITE_AI_URL` apunta la app a él.
 
 **App instalable y sin conexión**: la versión compilada (`npm run build`) se puede instalar desde el navegador y abre sin red; los datos ya viven en el propio navegador.
 

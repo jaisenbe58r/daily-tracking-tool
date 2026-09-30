@@ -12,6 +12,8 @@ export interface AiControls {
   /** Enter on an answer: apply a proposal, copy a text. */
   onAccept: () => void
   onCancel: () => void
+  /** Key mode: the user's Anthropic key, typed once when the panel asks for it. */
+  onKey: (key: string) => void
 }
 
 interface Props {
@@ -141,7 +143,19 @@ export function QuickCapture({ onCapture, onClose, ai, initialText = '' }: Props
         ) : (
           !job && <kbd>↵</kbd>
         )}
-        {job && <AiPanel job={job} onAccept={accept} onClose={close} onRetry={askAi} />}
+        {job && (
+          <AiPanel
+            job={job}
+            onAccept={accept}
+            onClose={close}
+            onRetry={askAi}
+            onKey={(key) => {
+              ai?.onKey(key)
+              // The key field goes away; Enter and Esc work on the line again, as for any answer.
+              inputRef.current?.focus()
+            }}
+          />
+        )}
       </div>
     </div>
   )
@@ -152,9 +166,10 @@ interface PanelProps {
   onAccept: () => void
   onClose: () => void
   onRetry: () => void
+  onKey: (key: string) => void
 }
 
-function AiPanel({ job, onAccept, onClose, onRetry }: PanelProps) {
+function AiPanel({ job, onAccept, onClose, onRetry, onKey }: PanelProps) {
   const esc = (label: string) => (
     <button type="button" className="capture-act" onClick={onClose}>
       <kbd>esc</kbd> {label}
@@ -170,6 +185,7 @@ function AiPanel({ job, onAccept, onClose, onRetry }: PanelProps) {
       </div>
     )
   }
+  if (job.phase === 'key') return <KeyPrompt invalid={job.invalid} onKey={onKey} onClose={onClose} />
   if (job.phase === 'error') {
     return (
       <div className="capture-panel" role="alert">
@@ -207,6 +223,51 @@ function AiPanel({ job, onAccept, onClose, onRetry }: PanelProps) {
           </button>
         )}
         {esc(job.changes.length ? 'descartar' : 'cerrar')}
+      </span>
+    </div>
+  )
+}
+
+/**
+ * Asked once, where the answer would appear: paste the key, Enter. It stays
+ * in this browser (localStorage) and only ever goes to Anthropic.
+ */
+function KeyPrompt({ invalid, onKey, onClose }: { invalid: boolean; onKey: (key: string) => void; onClose: () => void }) {
+  const [key, setKey] = useState('')
+  const ref = useRef<HTMLInputElement>(null)
+  useLayoutEffect(() => ref.current?.focus(), [])
+  const save = () => key.trim() && onKey(key.trim())
+  return (
+    <div className="capture-panel" role="group" aria-label="Clave de Anthropic">
+      <span className="ai-summary">
+        {invalid ? 'Anthropic no acepta esa clave. Prueba con otra.' : 'Pega tu clave de Anthropic. Se guarda solo en este navegador.'}
+      </span>
+      <input
+        ref={ref}
+        className="ai-key"
+        type="password"
+        value={key}
+        placeholder="sk-ant-…"
+        autoComplete="off"
+        spellCheck={false}
+        onChange={(e) => setKey(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            save()
+          } else if (e.key === 'Escape') {
+            e.preventDefault()
+            onClose()
+          }
+        }}
+      />
+      <span className="capture-foot">
+        <button type="button" className="capture-act" onClick={save}>
+          <kbd>↵</kbd> guardar
+        </button>
+        <button type="button" className="capture-act" onClick={onClose}>
+          <kbd>esc</kbd> cerrar
+        </button>
       </span>
     </div>
   )
