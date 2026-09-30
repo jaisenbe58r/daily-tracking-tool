@@ -16,6 +16,8 @@ import { useTemplates } from './lib/templates'
 import { descendantIds } from './lib/tree'
 import { useAi } from './ai/useAi'
 import { useInbox } from './ai/inbox/useInbox'
+import { hideSnoozed, snoozedCount } from './lib/snooze'
+import { NoticeContext, useNoticeValue } from './lib/teach'
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
 const M = isMac ? '⌘' : 'Ctrl '
@@ -46,13 +48,21 @@ export default function App() {
   const [today, setToday] = useState(() => new Date())
   const { view, sort, filters } = prefs
 
+  const todayKey = dateKey(today)
+  // Postponed tasks leave the sheet until their day, unless the user asks to see them.
+  const [wantSnoozed, setShowSnoozed] = useState(false)
+  const snoozed = snoozedCount(state.tasks, todayKey)
+  const showSnoozed = wantSnoozed && snoozed > 0
+  const shown = useMemo(() => (showSnoozed ? state.tasks : hideSnoozed(state.tasks, todayKey)), [showSnoozed, state.tasks, todayKey])
+  const listState = useMemo(() => (shown === state.tasks ? state : { ...state, tasks: shown }), [shown, state])
+
   const tags = useMemo(() => allTags(state.tasks), [state.tasks])
   // A tag filter pointing at a tag nobody uses any more would show an empty sheet.
   const tag = filters.tag && tags.includes(filters.tag) ? filters.tag : null
   const effective = useMemo(() => ({ ...filters, tag }), [filters, tag])
-  const groups = useMemo(() => organize(state.tasks, sort, effective, today.getTime()), [state.tasks, sort, effective, today])
+  const groups = useMemo(() => organize(shown, sort, effective, today.getTime()), [shown, sort, effective, today])
   const filtering = isFiltering(effective)
-  const [toast, setToast] = useState<{ text: string; id: number } | null>(null)
+  const [toast, setToast] = useState<{ text: string; id: number; zero?: boolean } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const { templates, save: saveTemplate, remove: removeTemplate, replaceAll: replaceTemplates } = useTemplates()
   const [capturing, setCapturing] = useState(false)
@@ -60,7 +70,6 @@ export default function App() {
   const [seed, setSeed] = useState<Seed>({ taskId: null, text: '', mode: 'changes' })
   const [searching, setSearching] = useState(false)
   const [focusId, setFocusId] = useState<string | null>(null)
-  const todayKey = dateKey(today)
   const ai = useAi(state.tasks, todayKey)
   const { mode: aiMode, hasKey: aiHasKey, forgetKey } = ai
   const inbox = useInbox(ai.mode, state.tasks, todayKey)
@@ -85,14 +94,16 @@ export default function App() {
   const { lastDay } = prefs
   useEffect(() => {
     if (lastDay === todayKey) return
-    dispatch({ type: 'carry-over', today: todayKey })
+    dispatch({ type: 'carry-over', today: todayKey, lastDay })
     setPrefs((p) => ({ ...p, lastDay: todayKey }))
   }, [lastDay, todayKey, dispatch, setPrefs])
 
   const notify = useCallback((text: string) => setToast({ text, id: Date.now() }), [])
+  const notice = useNoticeValue(notify)
+  const { teach } = notice
   useEffect(() => {
     if (!toast) return
-    const timer = setTimeout(() => setToast(null), 3200)
+    const timer = setTimeout(() => setToast(null), toast.zero ? 6000 : 3200)
     return () => clearTimeout(timer)
   }, [toast])
 
@@ -161,7 +172,7 @@ export default function App() {
   const searchResults = filters.query.trim()
     ? view === 'list'
       ? groups.reduce((n, g) => n + g.rows.filter((r) => !r.dimmed).length, 0)
-      : state.tasks.filter((t) => t.text.trim() && matches(t, { ...effective, hideDone: false }, todayKey)).length
+      : shown.filter((t) => t.text.trim() && matches(t, { ...effective, hideDone: false }, todayKey)).length
     : 0
   const jumpToFirstResult = () => {
     if (view === 'board') {
@@ -325,6 +336,16 @@ export default function App() {
   )
 
   const setView = useCallback((v: View) => setPrefs((p) => ({ ...p, view: v })), [setPrefs])
+
+  // Hoy a cero: what's left for today, and one quiet moment when it reaches zero.
+  const leftToday = shown.filter((t) => t.status !== 'done' && t.text.trim() && t.due !== null && t.due <= todayKey).length
+  const doneToday = shown.some((t) => t.status === 'done' && t.completedAt !== null && dateKey(new Date(t.completedAt)) === todayKey)
+  const prevLeft = useRef<number | null>(null)
+  useEffect(() => {
+    const before = prevLeft.current
+    prevLeft.current = leftToday
+    if (before && !leftToday && doneToday) setToast({ text: `Hoy, a cero · ${isMac ? '⌥' : 'Alt+'}R copia el resumen`, id: Date.now(), zero: true })
+  }, [leftToday, doneToday])
   const toggleTag = useCallback(
     (t: string) => setPrefs((p) => ({ ...p, filters: { ...p.filters, tag: p.filters.tag === t ? null : t } })),
     [setPrefs],
@@ -408,11 +429,12 @@ export default function App() {
     return () => clearInterval(timer)
   }, [])
 
-  const open = state.tasks.filter((t) => t.status !== 'done' && t.text.trim()).length
-  const done = state.tasks.filter((t) => t.status === 'done').length
+  const open = shown.filter((t) => t.status !== 'done' && t.text.trim()).length
+  const done = shown.filter((t) => t.status === 'done').length
 
   return (
-    <TodayContext.Provider value={dateKey(today)}>
+    <TodayContext.Provider value={todayKey}>
+      <NoticeContext.Provider value={notice}>
       <div className="app" data-view={view}>
         <header className="top">
           <div className="brand">Daily Tracking Tool</div>
@@ -423,7 +445,10 @@ export default function App() {
                 role="tab"
                 aria-selected={view === v}
                 title={`${v === 'list' ? 'Lista' : 'Tablero'} (${isMac ? '⌥' : 'Alt+'}${i + 1})`}
-                onClick={() => setView(v)}
+                onClick={(e) => {
+                  setView(v)
+                  if (e.detail > 0) teach(`view-${v}`, `${A}${i + 1}`)
+                }}
               >
                 {v === 'list' ? 'List' : 'Board'}
               </button>
@@ -465,13 +490,17 @@ export default function App() {
               onSort={(s) => setPrefs((p) => ({ ...p, sort: s }))}
               onFilters={(f) => setPrefs((p) => ({ ...p, filters: f }))}
               focusName={view === 'list' && focusTask ? focusTask.text.trim() : null}
+              leftToday={leftToday}
+              snoozed={snoozed}
+              showSnoozed={showSnoozed}
+              onShowSnoozed={() => setShowSnoozed(!showSnoozed)}
               onExitFocus={() => setFocusId(null)}
             />
           </div>
 
           {view === 'list' ? (
             <ListView
-              state={state}
+              state={listState}
               dispatch={dispatch}
               groups={groups}
               structural={sort === 'manual' && !filtering}
@@ -482,7 +511,7 @@ export default function App() {
               focused={focused}
             />
           ) : (
-            <BoardView tasks={state.tasks} dispatch={dispatch} filters={effective} onTagClick={toggleTag} />
+            <BoardView tasks={shown} dispatch={dispatch} filters={effective} onTagClick={toggleTag} />
           )}
         </main>
 
@@ -573,11 +602,12 @@ export default function App() {
         />
 
         {toast && (
-          <div key={toast.id} className="toast" role="status">
+          <div key={toast.id} className="toast" data-zero={toast.zero || undefined} role="status">
             {toast.text}
           </div>
         )}
       </div>
+      </NoticeContext.Provider>
     </TodayContext.Provider>
   )
 }
