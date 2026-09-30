@@ -71,10 +71,31 @@ export function parse(raw: string | null): Task[] {
   }
 }
 
+/** Where an unreadable sheet is set aside before a fresh one is saved over it. */
+export const RESCUE_KEY = `${STORAGE_KEY}:rescate`
+
+/** True when `raw` holds something but not a sheet we can read (a half-written or hand-edited save). */
+export function isUnreadable(raw: string | null): boolean {
+  if (!raw) return false
+  try {
+    return !Array.isArray(JSON.parse(raw)?.tasks)
+  } catch {
+    return true
+  }
+}
+
+/** Set when this load found an unreadable save and kept a copy under RESCUE_KEY. */
+export let rescued = false
+
 export function load(): Task[] {
   let raw: string | null = null
   try {
     raw = localStorage.getItem(STORAGE_KEY)
+    // Never save a blank sheet over data we couldn't read: keep the original aside first.
+    if (isUnreadable(raw) && localStorage.getItem(RESCUE_KEY) !== raw) {
+      localStorage.setItem(RESCUE_KEY, raw as string)
+      rescued = true
+    }
   } catch {
     // Storage blocked (private mode, policy): work in memory.
   }

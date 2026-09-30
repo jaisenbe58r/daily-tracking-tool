@@ -315,7 +315,7 @@ function EntityPage({ mem, k, go, open }: { mem: Memory; k: PageKey; go: Go; ope
       <div className="m-eyebrow">{kind === 'p' ? 'Proyecto' : kind === 'h' ? 'Persona' : 'Tema'}</div>
       <h1 className="m-h1">{kind === 'h' ? `@${pageName(mem, k)}` : pageName(mem, k)}</h1>
       <div className="m-meta">
-        {yearDay(first)} – {daysBetween(last, mem.today) <= 3 ? 'hoy' : yearDay(last)} · {plural(all.length, 'tarea', 'tareas')} · {closed.length} cerradas · vuelo mediano {median(closed.map(flight))} d
+        {yearDay(first)} – {daysBetween(last, mem.today) <= 3 ? 'hoy' : yearDay(last)} · {plural(all.length, 'tarea', 'tareas')} · {plural(closed.length, 'cerrada', 'cerradas')} · vuelo mediano {median(closed.map(flight))} d
       </div>
       <p className="m-summary">{summary}</p>
 
@@ -332,7 +332,7 @@ function EntityPage({ mem, k, go, open }: { mem: Memory; k: PageKey; go: Go; ope
       <H2 note="lo que más destaca de cada mes">Cronología</H2>
       {chronology(mem, k).map((m) => (
         <div className="m-month" key={m.month}>
-          <div className="m-mo">{monthName(m.month)}<span>{m.closed} cerradas</span></div>
+          <div className="m-mo">{monthName(m.month)}<span>{plural(m.closed, 'cerrada', 'cerradas')}</span></div>
           <ul>
             {m.highlights.map((t) => (
               <li key={t.id}>

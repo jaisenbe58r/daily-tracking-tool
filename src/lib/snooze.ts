@@ -69,6 +69,12 @@ export function daysAway(task: Task): number {
   return Math.max(1, Math.round((atNoon(task.snooze.until).getTime() - atNoon(task.snooze.since).getTime()) / 86_400_000))
 }
 
+/** Whole days since it was postponed: how long an answer has been awaited. */
+export function daysWaiting(task: Task, today: string): number {
+  if (!task.snooze) return 0
+  return Math.max(1, Math.round((atNoon(today).getTime() - atNoon(task.snooze.since).getTime()) / 86_400_000))
+}
+
 /** The sheet without postponed tasks and their subtasks. Same array when nothing is postponed. */
 export function hideSnoozed(tasks: Task[], today: string): Task[] {
   if (!tasks.some((t) => isSnoozed(t, today))) return tasks
