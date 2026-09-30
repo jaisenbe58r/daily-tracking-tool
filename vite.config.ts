@@ -8,7 +8,14 @@ import { defineConfig, loadEnv, type Plugin, type PreviewServer, type ViteDevSer
  */
 function aiRuntime(): Plugin {
   const mount = async (server: ViteDevServer | PreviewServer) => {
-    if (!process.env.ANTHROPIC_API_KEY && !process.env.OPENAI_API_KEY && !process.env.GOOGLE_API_KEY) return
+    if (!process.env.ANTHROPIC_API_KEY && !process.env.OPENAI_API_KEY && !process.env.GOOGLE_API_KEY) {
+      // No key: answer the probe with "no agents" instead of a 404, so the console stays clean.
+      server.middlewares.use('/api/ai/info', (_req, res) => {
+        res.setHeader('content-type', 'application/json')
+        res.end('{"agents":{}}')
+      })
+      return
+    }
     const { createAiHandler } = await import('./server/ai.ts')
     const { createCopilotNodeHandler } = await import('@copilotkit/runtime/v2/node')
     const handle = createCopilotNodeHandler(createAiHandler())

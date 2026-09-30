@@ -8,7 +8,7 @@ import { isShortcut, useNotice } from '../lib/teach'
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
 const M = isMac ? '⌘' : 'Ctrl '
-const A = isMac ? '⌥' : 'Alt '
+const A = isMac ? '⌥' : 'Alt+'
 
 const dayFmt = new Intl.DateTimeFormat('es-ES', { weekday: 'short', day: 'numeric', month: 'short' })
 /** "jue 1 oct", always the date (the label already says "Mañana"). */

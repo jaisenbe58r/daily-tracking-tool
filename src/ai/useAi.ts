@@ -120,8 +120,14 @@ export function useAi(tasks: Task[], today: string) {
   const search = useCallback(async (query: string, signal?: AbortSignal): Promise<string[]> => {
     const snap = snapshot(latest.current.tasks, latest.current.today)
     const { ask: run } = await import('./client')
-    const { ids } = await run(modeRef.current, { tool: 'select_tasks', request: `Busca: ${query}`, context: snap.text, signal })
-    return idsFor(snap.refs, ids)
+    try {
+      const { ids } = await run(modeRef.current, { tool: 'select_tasks', request: `Busca: ${query}`, context: snap.text, signal })
+      return idsFor(snap.refs, ids)
+    } catch (error) {
+      // A refused key is already forgotten: the page shouldn't keep offering to forget it.
+      if (needsKey(error)) setHasKey(false)
+      throw error
+    }
   }, [])
 
   /**

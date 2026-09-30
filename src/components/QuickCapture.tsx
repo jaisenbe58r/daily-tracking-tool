@@ -199,6 +199,15 @@ function AiPanel({ job, onAccept, onClose, onRetry, onKey }: PanelProps) {
       </div>
     )
   }
+  if (job.phase === 'text' && !job.text.trim()) {
+    // The model may write nothing on purpose: the task isn't a mail to send.
+    return (
+      <div className="capture-panel" role="status" aria-live="polite">
+        <span className="ai-summary">Nada que redactar: esta tarea no parece un correo</span>
+        <span className="capture-foot">{esc('cerrar')}</span>
+      </div>
+    )
+  }
   if (job.phase === 'text') {
     return (
       <div className="capture-panel" role="status" aria-live="polite">

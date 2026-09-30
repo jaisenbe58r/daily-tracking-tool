@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BoardView } from './components/BoardView'
 import { ListView } from './components/ListView'
 import type { QuickItem } from './components/QuickActions'
@@ -9,6 +9,7 @@ import { exportTasks, readBackup } from './lib/backup'
 import { allTags, inheritFromFilters, isFiltering, matches, organize } from './lib/organize'
 import { usePrefs, type View } from './lib/prefs'
 import { useTasks } from './lib/store'
+import { RESCUE_KEY, rescued } from './lib/persist'
 import { dateKey, parseTask } from './lib/parse'
 import { TodayContext } from './lib/today'
 import { dailySummary, subtreeOutline } from './lib/daily'
@@ -20,10 +21,14 @@ import { DRAFT_LABEL, draftContext, draftRequest, getDraft, setDraft, usePrefetc
 import type { Meeting } from './ai/meeting'
 import { hideSnoozed, snoozedCount } from './lib/snooze'
 import { NoticeContext, useNoticeValue } from './lib/teach'
+import { useEventLog } from './memory/log'
+
+// The memory is its own view: loaded the first time it opens, so the sheet stays light.
+const MemoryView = lazy(() => import('./memory/MemoryView'))
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
 const M = isMac ? '⌘' : 'Ctrl '
-const A = isMac ? '⌥' : 'Alt '
+const A = isMac ? '⌥' : 'Alt+'
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 /** What the capture line opens with: the task it's about (AI context), text to send at once, and what kind of answer. */
 interface Seed {
@@ -64,7 +69,10 @@ export default function App() {
   const effective = useMemo(() => ({ ...filters, tag }), [filters, tag])
   const groups = useMemo(() => organize(shown, sort, effective, today.getTime()), [shown, sort, effective, today])
   const filtering = isFiltering(effective)
-  const [toast, setToast] = useState<{ text: string; id: number; zero?: boolean } | null>(null)
+  // A save we couldn't read was kept aside rather than overwritten: the first notice says so.
+  const [toast, setToast] = useState<{ text: string; id: number; zero?: boolean } | null>(() =>
+    rescued ? { text: `La hoja guardada estaba dañada; se ha apartado sin borrarla (${RESCUE_KEY})`, id: 0 } : null,
+  )
   const fileRef = useRef<HTMLInputElement>(null)
   const { templates, save: saveTemplate, remove: removeTemplate, replaceAll: replaceTemplates } = useTemplates()
   const [capturing, setCapturing] = useState(false)
@@ -80,12 +88,15 @@ export default function App() {
   useEffect(() => {
     aiReady.current = ai.available
   }, [ai.available])
+  const { log, merge: mergeLog } = useEventLog(state.tasks, state.external)
+  /** Memoria (Alt+M) is open, starting from this task's pages. */
+  const [memory, setMemory] = useState<{ startTask: string | null } | null>(null)
 
   // Latest values for handlers registered once.
-  const latest = useRef({ tasks: state.tasks, templates, focusId, todayKey })
+  const latest = useRef({ tasks: state.tasks, templates, focusId, todayKey, log })
   useEffect(() => {
-    latest.current = { tasks: state.tasks, templates, focusId, todayKey }
-  }, [state.tasks, templates, focusId, todayKey])
+    latest.current = { tasks: state.tasks, templates, focusId, todayKey, log }
+  }, [state.tasks, templates, focusId, todayKey, log])
 
   const focusTask = focusId ? state.tasks.find((t) => t.id === focusId) : undefined
   const focused = useMemo(
@@ -113,18 +124,19 @@ export default function App() {
   const importFile = useCallback(
     async (file: File) => {
       try {
-        const { tasks, templates: saved } = await readBackup(file)
+        const { tasks, templates: saved, log: history } = await readBackup(file)
         dispatch({ type: 'import', tasks })
         if (saved.length) replaceTemplates(saved)
+        if (history.length) mergeLog(history)
         notify(`${plural(tasks.length, 'tarea')} ${tasks.length === 1 ? 'importada' : 'importadas'} · ${isMac ? '⌘' : 'Ctrl+'}Z deshace`)
       } catch {
         notify('Ese archivo no es una copia de Daily Tracking Tool')
       }
     },
-    [dispatch, notify, replaceTemplates],
+    [dispatch, notify, replaceTemplates, mergeLog],
   )
   const exportAll = useCallback(
-    () => notify(`Copia guardada: ${exportTasks(latest.current.tasks, latest.current.templates)}`),
+    () => notify(`Copia guardada: ${exportTasks(latest.current.tasks, latest.current.templates, latest.current.log)}`),
     [notify],
   )
   const openImport = useCallback(() => fileRef.current?.click(), [])
@@ -194,7 +206,10 @@ export default function App() {
     requestAnimationFrame(() => {
       // Only if nothing else claimed focus in the meantime (e.g. ⌘F right after Esc).
       const active = document.activeElement
-      if (!active || active === document.body) returnTo.current?.focus?.()
+      if (active && active !== document.body) return
+      // The row it came from may be gone (the AI replaced an empty sheet): land on the first task instead.
+      if (returnTo.current?.isConnected) returnTo.current.focus?.()
+      else document.querySelector<HTMLElement>('textarea[data-task-text]')?.focus()
     })
 
   const closeCapture = () => {
@@ -400,6 +415,7 @@ export default function App() {
             dispatch({ type: 'focus', id: taskId })
           },
         })),
+        { label: 'Abrir la memoria', hint: `${A}M`, keywords: 'memoria wiki diario grafo panorama graficos historia', run: () => setMemory({ startTask: taskId }) },
         { label: 'Copiar resumen del día', hint: `${A}R`, keywords: 'resumen daily markdown portapapeles', run: () => { copySummary(); dispatch({ type: 'focus', id: taskId }) } },
         { label: 'Buscar', hint: `${M}F`, keywords: 'buscar filtrar search', run: () => setSearching(true) },
         { label: 'Exportar copia', hint: `${M}S`, keywords: 'backup json guardar descargar', run: exportAll },
@@ -452,8 +468,13 @@ export default function App() {
           e.preventDefault()
           dispatch({ type: redo ? 'redo' : 'undo' })
         }
+      } else if (e.altKey && e.code === 'KeyM') {
+        e.preventDefault()
+        const from = activeTaskId()
+        setMemory((m) => (m ? null : { startTask: from }))
       } else if (e.altKey && (e.code === 'Digit1' || e.code === 'Digit2')) {
         e.preventDefault()
+        setMemory(null)
         setView(e.code === 'Digit1' ? 'list' : 'board')
       } else if (e.altKey && e.code === 'KeyT') {
         e.preventDefault()
@@ -520,9 +541,10 @@ export default function App() {
               <button
                 key={v}
                 role="tab"
-                aria-selected={view === v}
+                aria-selected={view === v && !memory}
                 title={`${v === 'list' ? 'Lista' : 'Tablero'} (${isMac ? '⌥' : 'Alt+'}${i + 1})`}
                 onClick={(e) => {
+                  setMemory(null)
                   setView(v)
                   if (e.detail > 0) teach(`view-${v}`, `${A}${i + 1}`)
                 }}
@@ -554,6 +576,29 @@ export default function App() {
           </div>
         </header>
 
+        {memory ? (
+          <Suspense fallback={<main className="sheet" />}>
+            <MemoryView
+              tasks={state.tasks}
+              log={log}
+              startTask={memory.startTask}
+              onClose={() => setMemory(null)}
+              onOpenTask={(id) => {
+                const task = state.tasks.find((t) => t.id === id)
+                setMemory(null)
+                setFocusId(null)
+                setPrefs((p) => ({
+                  ...p,
+                  view: 'list',
+                  filters: { ...p.filters, tag: null, today: false, query: '', hideDone: p.filters.hideDone && task?.status !== 'done' },
+                }))
+                if (task?.snooze) setShowSnoozed(true)
+                requestAnimationFrame(() => dispatch({ type: 'reveal', id }))
+              }}
+            />
+          </Suspense>
+        ) : (
+        <>
         <main className="sheet">
           <div className="sheet-head">
             <h1 className="today">{todayFmt.format(today)}</h1>
@@ -620,7 +665,10 @@ export default function App() {
           <span><kbd>{isMac ? '⌘' : 'Ctrl'}F</kbd> buscar</span>
           <span><kbd>{isMac ? '⌥' : 'Alt+'}T</kbd> hoy</span>
           <span><kbd>{isMac ? '⌥' : 'Alt+'}1</kbd><kbd>{isMac ? '⌥' : 'Alt+'}2</kbd> vista</span>
+          <span><kbd>{isMac ? '⌥' : 'Alt+'}M</kbd> memoria</span>
         </footer>
+        </>
+        )}
 
         {capturing && (
           <QuickCapture
@@ -641,7 +689,8 @@ export default function App() {
                     job: ai.job,
                     onAsk: (text) => {
                       const request = seed.request && text === seed.text ? seed.request : text
-                      if (seed.mode === 'draft') void draftFor(seed.taskId, true, text === seed.text ? '' : text)
+                      // What's typed after the «Borrador: …» label is the extra instruction, not the label itself.
+                      if (seed.mode === 'draft') void draftFor(seed.taskId, true, (text.startsWith(seed.text) ? text.slice(seed.text.length) : text).trim())
                       else if (seed.mode === 'summary') openAi(seed.taskId, request, 'summary', text)
                       else void ai.ask(request, seed.taskId)
                     },
@@ -649,7 +698,9 @@ export default function App() {
                     onKey: ai.saveKey,
                     onAccept: () => {
                       const job = ai.job
-                      if (job?.phase === 'text') {
+                      if (job?.phase === 'text' && !job.text.trim()) {
+                        // Nothing was written: there's nothing to copy.
+                      } else if (job?.phase === 'text') {
                         const draft = seed.mode === 'draft'
                         const hasSource = draft && state.tasks.find((t) => t.id === seed.taskId)?.source
                         navigator.clipboard
@@ -663,7 +714,13 @@ export default function App() {
                           ai.cancel()
                           return
                         }
-                        dispatch({ type: 'apply', tasks: job.next })
+                        // Like a plain capture, what the AI adds keeps the active Hoy/tag filter, so it doesn't vanish on arrival.
+                        const inherit = inheritFromFilters(effective, todayKey)
+                        const before = new Set(job.base.map((t) => t.id))
+                        const next = job.next.map((t) =>
+                          before.has(t.id) ? t : { ...t, due: t.due ?? inherit.due ?? null, tags: [...new Set([...t.tags, ...(inherit.tags ?? [])])] },
+                        )
+                        dispatch({ type: 'apply', tasks: next })
                         notify(`${job.summary} · ${isMac ? '⌘' : 'Ctrl+'}Z deshace`)
                       } else return
                       ai.cancel()

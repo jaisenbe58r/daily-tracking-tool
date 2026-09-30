@@ -8,6 +8,8 @@
  * - A date at the end of the line ("hoy", "mañana", "pasado mañana", a weekday,
  *   "3/10"), or anywhere with an `@` ("@viernes"). Only the end of the line is
  *   read without `@`, so "informe de mañana para Ana" stays as written.
+ * - `@nombre` that isn't a date ("@luis") stays in the text as a mention; the
+ *   memory turns it into a person's page.
  * - A recurrence at the end ("cada día", "cada lunes", "cada mes", "entre semana"):
  *   completing the task plants the next one.
  */

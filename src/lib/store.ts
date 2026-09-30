@@ -27,6 +27,8 @@ interface History {
   future: Task[][]
   /** `id:field` of the last text edit, so a burst of typing is one undo step. */
   typing: string | null
+  /** The last change came from outside this tab's editing (another tab, an import): history doesn't log it. */
+  external: boolean
 }
 
 export type AppState = State & History
@@ -61,6 +63,8 @@ export type Action =
   | { type: 'toggle-collapse'; id: string }
   | { type: 'remove'; id: string; focusPrev?: boolean }
   | { type: 'focus'; id: string; target?: Focus['target']; caret?: Caret }
+  /** Opens every collapsed parent above the task, then focuses it (coming back from the memory). */
+  | { type: 'reveal'; id: string }
   | { type: 'replace'; tasks: Task[] }
   /** A whole-sheet change proposed by the AI and accepted by the user: one undo step. */
   | { type: 'apply'; tasks: Task[] }
@@ -244,6 +248,14 @@ function reducer(state: State, action: Exclude<Action, { type: 'undo' | 'redo' }
     case 'focus':
       return { ...state, focus: focusOn(action.id, action.caret, action.target) }
 
+    case 'reveal': {
+      let out = tasks
+      for (let p = find(action.id)?.parentId; p; p = out.find((t) => t.id === p)?.parentId) {
+        if (out.find((t) => t.id === p)?.collapsed) out = tree.update(out, p, { collapsed: false })
+      }
+      return { tasks: out, focus: focusOn(action.id) }
+    }
+
     case 'apply':
       return { ...state, tasks: action.tasks.length ? action.tasks : [tree.newTask()] }
 
@@ -270,11 +282,12 @@ function withHistory(state: AppState, action: Action): AppState {
       [from]: state[from].slice(0, -1),
       [to]: [...state[to], state.tasks],
       typing: null,
+      external: false,
       focus: restoreFocus(state, snapshot),
     }
   }
   const next = reducer(state, action)
-  if (action.type === 'replace') return { ...next, past: [], future: [], typing: null }
+  if (action.type === 'replace') return { ...next, past: [], future: [], typing: null, external: true }
   if (next.tasks === state.tasks) return { ...state, ...next, typing: action.type === 'focus' ? null : state.typing }
 
   const typing = action.type === 'edit' ? `${action.id}:${Object.keys(action.patch).join()}` : null
@@ -284,6 +297,7 @@ function withHistory(state: AppState, action: Action): AppState {
     past: coalesce ? state.past : [...state.past, state.tasks].slice(-HISTORY_LIMIT),
     future: [],
     typing,
+    external: action.type === 'import',
   }
 }
 
@@ -314,6 +328,7 @@ function init(): AppState {
     past: [],
     future: [],
     typing: null,
+    external: false,
   }
 }
 

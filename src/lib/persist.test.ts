@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parse, sanitize } from './persist'
+import { isUnreadable, parse, sanitize } from './persist'
 
 describe('persist', () => {
   it('returns nothing for garbage', () => {
@@ -24,6 +24,13 @@ describe('persist', () => {
     expect(tasks.map((t) => t.id)).toEqual(['a', 'b', 'c'])
     expect(tasks[0].parentId).toBeNull()
     expect(tasks.filter((t) => t.parentId === null).length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('tells an unreadable save from an empty one', () => {
+    expect(isUnreadable('{"version":1,"tasks":[{"id":"x"')).toBe(true)
+    expect(isUnreadable('{"tasks": 3}')).toBe(true)
+    expect(isUnreadable('{"version":1,"tasks":[]}')).toBe(false)
+    expect(isUnreadable(null)).toBe(false)
   })
 })
 
