@@ -17,6 +17,8 @@ propose_changes: cambios en el folio.
 
 write_text: un texto para el usuario, listo para pegar. Para el resumen del día: lo cerrado hoy, lo que sigue en curso y lo que queda para mañana, en frases cortas y agrupado por proyecto cuando lo haya. Solo hechos del contexto; nada inventado, sin saludos ni cierre. Para un borrador de correo: solo el cuerpo, breve, en la voz del usuario (imita sus propios mensajes del hilo); nunca inventes datos ni compromisos: marca con [dato] lo que falte.
 
+mark_phrases: subrayado. Para cada tarea, la frase clave que conviene ver de un vistazo (un nombre, una cifra, un plazo, el objeto de la tarea), copiada letra por letra del texto, de 1 a 5 palabras, nunca la tarea entera. Solo si aporta: en tareas cortas u obvias, ninguna. Como mucho una por tarea; en la duda, ninguna.
+
 select_tasks: búsqueda por significado. Devuelve las refs de las tareas que responden a la búsqueda aunque no compartan palabras (sinónimos, el proyecto al que pertenecen, lo que implican), de más a menos relevante. Si nada encaja, lista vacía.`
 
 export const TOOL_DESCRIPTIONS = {
@@ -24,6 +26,7 @@ export const TOOL_DESCRIPTIONS = {
     'Propone cambios en el folio. El usuario ve la propuesta y la aplica o la descarta. Llámala una sola vez con todas las operaciones.',
   write_text: 'Devuelve un texto redactado para el usuario (un resumen), que verá y copiará tal cual.',
   select_tasks: 'Devuelve las tareas que responden a una búsqueda por significado.',
+  mark_phrases: 'Devuelve, para las tareas que lo merecen, la frase clave a subrayar, copiada tal cual de su texto.',
 } as const
 
 export type ToolName = keyof typeof TOOL_DESCRIPTIONS

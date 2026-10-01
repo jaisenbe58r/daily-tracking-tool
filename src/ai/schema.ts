@@ -31,6 +31,13 @@ export const textSchema = z.object({
   text: z.string().describe('El texto final, listo para pegar'),
 })
 
+/** `mark_phrases`: the key phrase to highlight in some of the tasks given. */
+export const marksSchema = z.object({
+  marks: z
+    .array(z.object({ id: z.string().describe('Ref de la tarea (t1)'), phrase: z.string().describe('Copiada letra por letra de su texto') }))
+    .describe('Solo las tareas con una frase que merezca subrayarse; puede ir vacía'),
+})
+
 /** `select_tasks`: the tasks that answer a search by meaning. */
 export const selectionSchema = z.object({
   ids: z.array(z.string()).describe('Refs (t3) de las tareas que encajan, de más a menos relevante'),

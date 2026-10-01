@@ -5,6 +5,7 @@ import type { EventInput } from './inbox/connectors'
 import { describeThread } from './drafts'
 import { writingStyle } from './style'
 import { HOURS, busyFrom, emailsIn, freeSlot, invitees, isoLocal, mentions, parseAdjust, workingDays } from './schedule'
+import { plain } from '../lib/mark'
 
 /**
  * «Preparar reunión»: before a meeting, what was said last time and what the
@@ -193,7 +194,7 @@ export async function newMeetingBasics(task: Task, also = '', now = new Date()):
 
 export function newMeetingRequest(task: Task, also = ''): string {
   return [
-    `Propón la reunión que pide la tarea «${task.text.trim()}» (la tarea seleccionada).`,
+    `Propón la reunión que pide la tarea «${plain(task.text).trim()}» (la tarea seleccionada).`,
     'Primera línea: el título de la invitación, corto (como mucho 60 caracteres), sin fecha, hora ni asistentes.',
     'Debajo, de 2 a 4 líneas que empiecen por "- ": la agenda, lo que hay que tratar o decidir, tomado de la tarea, su nota, sus subtareas y el hilo del correo. Nada inventado.',
     'Nada más: sin saludo, sin firma, sin Markdown.',

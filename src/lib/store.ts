@@ -71,6 +71,8 @@ export type Action =
   | { type: 'replace'; tasks: Task[] }
   /** A whole-sheet change proposed by the AI and accepted by the user: one undo step. */
   | { type: 'apply'; tasks: Task[] }
+  /** Subrayado automático: the AI's key phrases (`text` already carries the ==…==); every id in `seen` is marked as looked at. */
+  | { type: 'auto-mark'; seen: string[]; texts: Record<string, string> }
   | { type: 'undo' }
   | { type: 'redo' }
 
@@ -290,6 +292,11 @@ function reducer(state: State, action: Exclude<Action, { type: 'undo' | 'redo' }
     case 'apply':
       return { ...state, tasks: action.tasks.length ? action.tasks : [tree.newTask()] }
 
+    case 'auto-mark': {
+      const seen = new Set(action.seen)
+      return { ...state, tasks: tasks.map((t) => (seen.has(t.id) ? { ...t, text: action.texts[t.id] ?? t.text, autoMarked: true } : t)) }
+    }
+
     case 'replace':
       return { ...state, tasks: action.tasks.length ? action.tasks : [tree.newTask()] }
   }
@@ -305,8 +312,11 @@ const HISTORY_LIMIT = 200
 function withHistory(state: AppState, action: Action): AppState {
   if (action.type === 'undo' || action.type === 'redo') {
     const [from, to] = action.type === 'undo' ? (['past', 'future'] as const) : (['future', 'past'] as const)
-    const snapshot = state[from].at(-1)
-    if (!snapshot) return state
+    const past = state[from].at(-1)
+    if (!past) return state
+    // Undoing a highlight keeps the "AI already looked" mark, so it isn't highlighted again.
+    const looked = new Set(state.tasks.filter((t) => t.autoMarked).map((t) => t.id))
+    const snapshot = looked.size ? past.map((t) => (looked.has(t.id) && !t.autoMarked ? { ...t, autoMarked: true } : t)) : past
     return {
       ...state,
       tasks: snapshot,

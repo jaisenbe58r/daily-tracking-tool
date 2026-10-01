@@ -5,6 +5,7 @@ import { WAITING_TAG } from '../lib/snooze'
 import { cleanBody, replyHeaders, sourceId, type GmailThread } from './inbox/sources'
 import { describeStyle, withSignature, writingStyle } from './style'
 import { emailsIn } from './schedule'
+import { plain } from '../lib/mark'
 
 /**
  * «Borrador listo»: tasks that mean writing to someone come with the mail
@@ -93,7 +94,7 @@ export async function createGmailDraft(task: Task, body: string): Promise<string
   const me = new Set(style?.me ? [style.me] : [])
   const head = thread?.messages?.length
     ? replyHeaders(thread, me)
-    : { to: emailsIn(`${task.text}\n${task.notes}`).filter((a) => !me.has(a)), cc: [], subject: subjectFrom(task.text) }
+    : { to: emailsIn(`${task.text}\n${task.notes}`).filter((a) => !me.has(a)), cc: [], subject: subjectFrom(plain(task.text)) }
   const draft = await createDraft({ ...head, body: withSignature(body, style?.signature ?? '') })
   if (!draft) return null
   return draft.viewUrl || DRAFTS_URL
@@ -113,7 +114,7 @@ export function useHasDraft(taskId: string): boolean {
 export function draftRequest(task: Task): string {
   const waiting = task.tags.includes(WAITING_TAG) || task.source?.waiting
   return [
-    `Redacta el correo que tengo que enviar para la tarea «${task.text.trim()}».`,
+    `Redacta el correo que tengo que enviar para la tarea «${plain(task.text).trim()}».`,
     waiting
       ? 'Es algo que espero de otra persona: un recordatorio breve y amable, de dos o tres frases, que pida lo pendiente sin reproches.'
       : 'Responde a lo que me piden en el último mensaje del hilo, si lo hay.',

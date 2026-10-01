@@ -1,13 +1,14 @@
 import { z } from 'zod'
 import { parse } from 'partial-json'
 import { TOOL_DESCRIPTIONS, type ToolName } from './prompt'
-import { proposalSchema, selectionSchema, textSchema } from './schema'
+import { marksSchema, proposalSchema, selectionSchema, textSchema } from './schema'
 
-/** The three answers a request can end in, whichever way the model is reached. */
+/** The answers a request can end in, whichever way the model is reached. */
 export const TOOLS = {
   propose_changes: { schema: proposalSchema, description: TOOL_DESCRIPTIONS.propose_changes },
   write_text: { schema: textSchema, description: TOOL_DESCRIPTIONS.write_text },
   select_tasks: { schema: selectionSchema, description: TOOL_DESCRIPTIONS.select_tasks },
+  mark_phrases: { schema: marksSchema, description: TOOL_DESCRIPTIONS.mark_phrases },
 } as const
 
 export type ToolResult<T extends ToolName> = z.infer<(typeof TOOLS)[T]['schema']>

@@ -21,6 +21,7 @@ import { useTemplates } from './lib/templates'
 import { descendantIds } from './lib/tree'
 import { useAi } from './ai/useAi'
 import { useInbox } from './ai/inbox/useInbox'
+import { useAutoMark } from './ai/autoMark'
 import { DRAFT_LABEL, createGmailDraft, draftContext, draftRequest, getDraft, getGmailDraft, setDraft, setGmailDraft, usePrefetchDrafts } from './ai/drafts'
 import type { Meeting, Plan } from './ai/meeting'
 import { readPlan } from './ai/schedule'
@@ -104,6 +105,7 @@ export default function App() {
   const { mode: aiMode, hasKey: aiHasKey, forgetKey } = ai
   const inbox = useInbox(ai.mode, state.tasks, todayKey)
   usePrefetchDrafts(ai.mode, inbox.available, state.tasks, todayKey)
+  useAutoMark(ai.mode, aiHasKey, state.tasks, dispatch)
   const aiReady = useRef(false)
   useEffect(() => {
     aiReady.current = ai.available
