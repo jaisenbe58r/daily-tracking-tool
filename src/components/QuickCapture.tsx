@@ -17,6 +17,10 @@ export interface AiControls {
   onKey: (key: string) => void
   /** Shown instead of the list of changes for a proposal (Plan del día: the strip as it will look). */
   preview?: ReactNode
+  /** A draft, inside claude.ai: Alt+G saves it as a Gmail draft (never sent) and opens it. */
+  onGmail?: () => void
+  /** What Enter does to a text answer, when it isn't copying it. */
+  acceptLabel?: string
 }
 
 interface Props {
@@ -99,6 +103,7 @@ export function QuickCapture({ onCapture, onClose, ai, initialText = '', pool }:
   }
 
   const answered = job?.phase === 'proposal' || job?.phase === 'text'
+  const gmail = job?.phase === 'text' && job.text.trim() ? ai?.onGmail : undefined
 
   return (
     <div className="qa-backdrop capture-backdrop" onPointerDown={close}>
@@ -147,6 +152,9 @@ export function QuickCapture({ onCapture, onClose, ai, initialText = '', pool }:
             } else if (e.altKey && e.code === 'KeyV' && canDictate) {
               e.preventDefault()
               toggleMic()
+            } else if (e.altKey && e.code === 'KeyG' && gmail) {
+              e.preventDefault()
+              gmail()
             }
           }}
         />
@@ -200,6 +208,8 @@ export function QuickCapture({ onCapture, onClose, ai, initialText = '', pool }:
             onAccept={acceptAnswer}
             onClose={close}
             onRetry={askAi}
+            onGmail={gmail}
+            acceptLabel={ai?.acceptLabel}
             onKey={(key) => {
               ai?.onKey(key)
               // The key field goes away; Enter and Esc work on the line again, as for any answer.
@@ -219,9 +229,11 @@ interface PanelProps {
   onClose: () => void
   onRetry: () => void
   onKey: (key: string) => void
+  onGmail?: () => void
+  acceptLabel?: string
 }
 
-function AiPanel({ job, preview, onAccept, onClose, onRetry, onKey }: PanelProps) {
+function AiPanel({ job, preview, onAccept, onClose, onRetry, onKey, onGmail, acceptLabel = 'copiar' }: PanelProps) {
   const esc = (label: string) => (
     <button type="button" className="capture-act" onClick={onClose}>
       <kbd>esc</kbd> {label}
@@ -266,8 +278,13 @@ function AiPanel({ job, preview, onAccept, onClose, onRetry, onKey }: PanelProps
         <p className="ai-prose">{job.text}</p>
         <span className="capture-foot">
           <button type="button" className="capture-act" onClick={onAccept}>
-            <kbd>↵</kbd> copiar
+            <kbd>↵</kbd> {acceptLabel}
           </button>
+          {onGmail && (
+            <button type="button" className="capture-act" onClick={onGmail} title="Guardarlo como borrador en Gmail y abrirlo (no se envía)">
+              <kbd>{isMac ? '⌥' : 'Alt+'}G</kbd> Gmail
+            </button>
+          )}
           {esc('cerrar')}
         </span>
       </div>
