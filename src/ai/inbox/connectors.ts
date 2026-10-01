@@ -8,6 +8,7 @@ import {
   shortlist,
   type CalendarEvent,
   type Candidate,
+  type GmailMessage,
   type GmailThread,
   type Kind,
   type Watched,
@@ -16,8 +17,9 @@ import { candidatesFromMeetings, isEmptyList, meetingsWith, parseMeetings, paylo
 
 /**
  * Reads the user's Gmail, Google Calendar and Granola through their own claude.ai
- * connectors: the page never sees a token, claude.ai asks once per connector,
- * and only read tools are declared (see the publish manifest in the README).
+ * connectors: the page never sees a token and claude.ai asks once per connector
+ * (see the publish manifest in the README). Besides reading, only two writes,
+ * each when the user asks: a Gmail draft (never sent) and a Calendar event.
  * Outside claude.ai there is no way in, and `connectors()` says so with null.
  */
 interface Mcp {
@@ -38,11 +40,11 @@ export function connectors(): Promise<Mcp | null> {
 }
 
 /** Why a source gave nothing, in words the user can act on. */
-export function sourceProblem(server: string, error: unknown): string {
+export function sourceProblem(server: string, error: unknown, verb = 'leer'): string {
   const code = (error as McpError)?.code
   if (code === 'needs_reauth') return `Vuelve a conectar ${server} en claude.ai (Ajustes → Conectores)`
   if (code === 'server_not_connected' || code === 'selection_required') return `Conecta ${server} en claude.ai (Ajustes → Conectores)`
-  if (code === 'not_in_manifest' || code === 'not_granted') return `Esta página no tiene permiso para leer ${server}`
+  if (code === 'not_in_manifest' || code === 'not_granted') return `Esta página no tiene permiso para ${verb} ${server}`
   if (code === 'unreadable') return `${server} respondió algo que no sé leer: no he propuesto nada de ahí`
   return `${server} no respondió`
 }
@@ -246,6 +248,56 @@ export async function mailWith(people: string[], days = 45): Promise<GmailThread
     view: 'THREAD_VIEW_MINIMAL',
   }).catch(() => ({ threads: [] as GmailThread[] }))
   return threads
+}
+
+/** The user's last few sent mails, whole (newest first): what their writing style is read from. */
+export async function sentMessages(count = 5): Promise<GmailMessage[] | null> {
+  const m = await connectors()
+  if (!m) return null
+  const { threads = [] } = await call<{ threads?: GmailThread[] }>(m, GMAIL, 'search_threads', { query: 'in:sent', pageSize: count, view: 'THREAD_VIEW_METADATA_ONLY' })
+  const read = await pool(threads.filter((t) => t.id).slice(0, count), 2, (t) =>
+    call<GmailThread>(m, GMAIL, 'get_thread', { threadId: t.id, messageFormat: 'PLAIN_TEXT' }).catch(() => null),
+  )
+  // Per thread, the user's latest message in it.
+  return read.flatMap((t) => [...(t?.messages ?? [])].reverse().filter((msg) => msg.labelIds?.includes('SENT')).slice(0, 1))
+}
+
+export interface DraftInput {
+  to: string[]
+  cc: string[]
+  subject: string
+  /** Plain text. */
+  body: string
+  replyToMessageId?: string
+}
+
+/** A Gmail draft, never sent: the user reviews and sends it from Gmail. Null outside claude.ai. */
+export async function createDraft(input: DraftInput): Promise<{ id?: string; viewUrl?: string } | null> {
+  const m = await connectors()
+  if (!m) return null
+  const { replyToMessageId, ...rest } = input
+  const payload = await call<{ id?: string; viewUrl?: string; draft?: { id?: string; viewUrl?: string } }>(m, GMAIL, 'create_draft', {
+    ...rest,
+    ...(replyToMessageId ? { replyToMessageId } : {}),
+  })
+  return payload.draft ?? payload
+}
+
+export interface EventInput {
+  summary: string
+  /** ISO with the local offset. */
+  startTime: string
+  endTime: string
+  attendees: { email: string }[]
+  description: string
+}
+
+/** A meeting on the user's primary calendar, with a Meet link; Google invites the attendees. Null outside claude.ai. */
+export async function createEvent(input: EventInput): Promise<CalendarEvent | null> {
+  const m = await connectors()
+  if (!m) return null
+  const payload = await call<CalendarEvent & { event?: CalendarEvent }>(m, CALENDAR, 'create_event', { ...input, addGoogleMeetUrl: true })
+  return payload.event ?? payload
 }
 
 /** Up to three earlier Granola notes with any of these people, newest first. Empty when Granola can't be read. */

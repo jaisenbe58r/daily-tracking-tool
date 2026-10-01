@@ -17,8 +17,10 @@ import { useTemplates } from './lib/templates'
 import { descendantIds } from './lib/tree'
 import { useAi } from './ai/useAi'
 import { useInbox } from './ai/inbox/useInbox'
-import { DRAFT_LABEL, draftContext, draftRequest, getDraft, setDraft, usePrefetchDrafts } from './ai/drafts'
-import type { Meeting } from './ai/meeting'
+import { DRAFT_LABEL, createGmailDraft, draftContext, draftRequest, getDraft, getGmailDraft, setDraft, setGmailDraft, usePrefetchDrafts } from './ai/drafts'
+import type { Meeting, Plan } from './ai/meeting'
+import { readPlan } from './ai/schedule'
+import { snapshot } from './ai/ops'
 import { hideSnoozed, snoozedCount } from './lib/snooze'
 import { NoticeContext, useNoticeValue } from './lib/teach'
 import { useEventLog } from './memory/log'
@@ -35,7 +37,7 @@ interface Seed {
   taskId: string | null
   /** Shown in the line. */
   text: string
-  mode: 'changes' | 'summary' | 'draft'
+  mode: 'changes' | 'summary' | 'draft' | 'meeting'
   /** Sent instead of `text` while the line still shows it (a short label for a long instruction). */
   request?: string
 }
@@ -46,8 +48,18 @@ const SUMMARY_REQUEST =
   'Redacta el resumen de mi día para compartirlo con el equipo: qué he cerrado, qué sigue en curso y qué queda para mañana. Breve, en frases, sin inventar nada.'
 
 const RECOGER = 'Recoger del correo y la agenda'
+const NEW_MEETING = 'Nueva reunión'
 
 const todayFmt = new Intl.DateTimeFormat('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })
+
+/** A new tab on a mail, event or draft. A real link, so it works inside claude.ai too. */
+function openLink(url: string) {
+  const a = document.createElement('a')
+  a.href = url
+  a.target = '_blank'
+  a.rel = 'noopener'
+  a.click()
+}
 
 export default function App() {
   const [state, dispatch] = useTasks()
@@ -301,11 +313,57 @@ export default function App() {
     },
     [present, ask, fail],
   )
-  const meetingItems = useCallback(async (): Promise<QuickItem[]> => {
-    const { upcomingMeetings, meetingWhen } = await import('./ai/meeting')
-    const meetings = (await upcomingMeetings()) ?? []
-    return meetings.map((m) => ({ label: m.title, hint: meetingWhen(m, latest.current.todayKey), run: () => void prepareMeeting(m) }))
-  }, [prepareMeeting])
+  /** «Nueva reunión»: the meeting proposed for a task, kept until Enter creates it on Calendar. */
+  const plan = useRef<Plan | null>(null)
+  /** A Gmail draft or a Calendar event on its way: a second Enter doesn't make two. */
+  const creating = useRef(false)
+  /**
+   * The meeting a task asks for: the first free half hour in the next two working days,
+   * with the people in the task and its mail; the model writes the title and agenda.
+   * `also` (typed in the line) moves it: «el jueves a las 10», «1 hora».
+   */
+  const newMeeting = useCallback(
+    async (taskId: string | null, also = '') => {
+      const task = taskId ? latest.current.tasks.find((t) => t.id === taskId) : undefined
+      if (!task?.text.trim()) return
+      const label = `${NEW_MEETING}: ${task.text.trim()}`
+      const run = ++captureRun.current
+      returnTo.current = null
+      plan.current = null
+      setSeed({ taskId: task.id, text: label, mode: 'meeting' })
+      setCapturing(true)
+      present(label)
+      try {
+        const { describePlan, newMeetingBasics, newMeetingRequest } = await import('./ai/meeting')
+        const basics = await newMeetingBasics(task, also)
+        if (run !== captureRun.current) return
+        if (!basics) throw new Error('Google Calendar no está disponible aquí')
+        const { ask: askModel } = await import('./ai/client')
+        const snap = snapshot(latest.current.tasks, latest.current.todayKey, task.id)
+        const { context, ...when } = basics
+        const { text } = await askModel(aiMode ?? 'claude', { tool: 'write_text', request: newMeetingRequest(task, also), context: context ? `${snap.text}\n\n${context}` : snap.text })
+        if (run !== captureRun.current) return
+        const next: Plan = { ...when, ...readPlan(text, task.text.trim()) }
+        plan.current = next
+        showText(label, describePlan(next, latest.current.todayKey))
+      } catch (error) {
+        if (run === captureRun.current) fail(label, error)
+      }
+    },
+    [present, showText, fail, aiMode],
+  )
+
+  const meetingItems = useCallback(
+    async (taskId: string): Promise<QuickItem[]> => {
+      const { upcomingMeetings, meetingWhen } = await import('./ai/meeting')
+      const named = Boolean(latest.current.tasks.find((t) => t.id === taskId)?.text.trim())
+      const fresh: QuickItem[] = named ? [{ label: `${NEW_MEETING}…`, run: () => void newMeeting(taskId) }] : []
+      // With «Nueva reunión» there's still something to pick when the calendar can't be read.
+      const meetings = (await (named ? upcomingMeetings().catch(() => null) : upcomingMeetings())) ?? []
+      return [...fresh, ...meetings.map((m) => ({ label: m.title, hint: meetingWhen(m, latest.current.todayKey), run: () => void prepareMeeting(m) }))]
+    },
+    [prepareMeeting, newMeeting],
+  )
 
   const { take, clear } = inbox
   /** Alt+I: the tasks found in mail and calendar, as a proposal to accept (Enter) or drop (Esc). */
@@ -336,16 +394,21 @@ export default function App() {
     recogerReady.current = inbox.available
   }, [inbox.available])
 
-  /** Alt+O: opens the mail or event a task came from. A real link, so it works inside claude.ai too. */
+  /** Alt+O: opens the mail or event a task came from. */
   const openSource = useCallback(() => {
     const id = activeTaskId()
     const url = latest.current.tasks.find((t) => t.id === id)?.source?.url
     if (!url) return false
-    const a = document.createElement('a')
-    a.href = url
-    a.target = '_blank'
-    a.rel = 'noopener'
-    a.click()
+    openLink(url)
+    return true
+  }, [])
+
+  /** Alt+G on the sheet: opens the Gmail draft already made for this task. */
+  const openGmailDraft = useCallback(() => {
+    const id = activeTaskId()
+    const url = id ? getGmailDraft(id) : undefined
+    if (!url) return false
+    openLink(url)
     return true
   }, [])
 
@@ -377,7 +440,7 @@ export default function App() {
                 ? [{
                     label: 'Preparar reunión…',
                     keywords: 'ia ai reunion reunión meeting preparar agenda calendario',
-                    list: { title: 'Preparar reunión', empty: 'No tienes reuniones hoy ni mañana', load: meetingItems },
+                    list: { title: 'Preparar reunión', empty: 'No tienes reuniones hoy ni mañana', load: () => meetingItems(taskId) },
                     run: () => {},
                   }]
                 : []),
@@ -499,6 +562,8 @@ export default function App() {
         void recoger()
       } else if (e.altKey && e.code === 'KeyO') {
         if (openSource()) e.preventDefault()
+      } else if (e.altKey && e.code === 'KeyG') {
+        if (openGmailDraft()) e.preventDefault()
       }
     }
     // Dropping a backup file anywhere on the page imports it.
@@ -519,7 +584,7 @@ export default function App() {
       window.removeEventListener('dragover', onDragOver)
       window.removeEventListener('drop', onDrop)
     }
-  }, [dispatch, setView, setPrefs, exportAll, openImport, importFile, toggleFocusMode, copySummary, planDay, writeSummary, recoger, openSource, draftFor])
+  }, [dispatch, setView, setPrefs, exportAll, openImport, importFile, toggleFocusMode, copySummary, planDay, writeSummary, recoger, openSource, openGmailDraft, draftFor])
 
   // Keep the heading right when the tab stays open past midnight.
   useEffect(() => {
@@ -529,6 +594,76 @@ export default function App() {
 
   const open = shown.filter((t) => t.status !== 'done' && t.text.trim()).length
   const done = shown.filter((t) => t.status === 'done').length
+
+  const doneCapturing = () => {
+    ai.cancel()
+    setCapturing(false)
+    closeCapture()
+  }
+
+  /** Alt+G on a draft: saved as a Gmail draft (never sent) and opened there. Made once per text. */
+  const toGmail = async () => {
+    const job = ai.job
+    const task = state.tasks.find((t) => t.id === seed.taskId)
+    if (seed.mode !== 'draft' || job?.phase !== 'text' || !job.text.trim() || !task || creating.current) return
+    const kept = getGmailDraft(task.id)
+    if (kept && getDraft(task.id) === job.text.trim()) {
+      openLink(kept)
+      doneCapturing()
+      return
+    }
+    creating.current = true
+    notify('Creando el borrador en Gmail…')
+    try {
+      const url = await createGmailDraft(task, job.text)
+      if (!url) {
+        notify('Gmail no está disponible aquí')
+        return
+      }
+      setGmailDraft(task.id, job.text, url)
+      openLink(url)
+      notify(`Borrador creado en Gmail · ${A}G lo abre`)
+      doneCapturing()
+    } catch (error) {
+      const { GMAIL, sourceProblem } = await import('./ai/inbox/connectors')
+      notify(sourceProblem(GMAIL, error, 'crear borradores en'))
+    } finally {
+      creating.current = false
+    }
+  }
+
+  /** Enter on «Nueva reunión»: the event on Calendar (Google invites the people), and the task points at it. */
+  const createMeeting = async () => {
+    const p = plan.current
+    if (!p || creating.current) return
+    creating.current = true
+    notify('Creando la reunión en Calendar…')
+    try {
+      const [{ eventInput }, { createEvent }] = await Promise.all([import('./ai/meeting'), import('./ai/inbox/connectors')])
+      const event = await createEvent(eventInput(p))
+      if (!event) {
+        notify('Google Calendar no está disponible aquí')
+        return
+      }
+      plan.current = null
+      const tasks = latest.current.tasks
+      const task = tasks.find((t) => t.id === p.taskId)
+      if (task) {
+        // The mail it came from stays reachable, in the note.
+        const mail = task.source?.app === 'gmail' && !task.notes.includes(task.source.url) ? task.source.url : ''
+        const source = event.htmlLink ? { app: 'calendar' as const, url: event.htmlLink, ...(event.id ? { id: event.id } : {}) } : task.source
+        const patch = { due: dateKey(p.start), source, notes: mail ? `${task.notes.trim()}\n${mail}`.trim() : task.notes }
+        dispatch({ type: 'apply', tasks: tasks.map((t) => (t.id === task.id ? { ...t, ...patch } : t)) })
+      }
+      notify(`Reunión creada en Calendar · ${p.emails.length ? `invitación enviada a ${p.emails.length}` : 'sin invitados'}`)
+      doneCapturing()
+    } catch (error) {
+      const { CALENDAR, sourceProblem } = await import('./ai/inbox/connectors')
+      notify(sourceProblem(CALENDAR, error, 'crear eventos en'))
+    } finally {
+      creating.current = false
+    }
+  }
 
   return (
     <TodayContext.Provider value={todayKey}>
@@ -680,6 +815,7 @@ export default function App() {
               closeCapture()
             }}
             onClose={() => {
+              plan.current = null
               setCapturing(false)
               closeCapture()
             }}
@@ -690,14 +826,22 @@ export default function App() {
                     onAsk: (text) => {
                       const request = seed.request && text === seed.text ? seed.request : text
                       // What's typed after the «Borrador: …» label is the extra instruction, not the label itself.
-                      if (seed.mode === 'draft') void draftFor(seed.taskId, true, (text.startsWith(seed.text) ? text.slice(seed.text.length) : text).trim())
+                      const also = (text.startsWith(seed.text) ? text.slice(seed.text.length) : text).trim()
+                      if (seed.mode === 'draft') void draftFor(seed.taskId, true, also)
+                      else if (seed.mode === 'meeting') void newMeeting(seed.taskId, also)
                       else if (seed.mode === 'summary') openAi(seed.taskId, request, 'summary', text)
                       else void ai.ask(request, seed.taskId)
                     },
                     onCancel: ai.cancel,
                     onKey: ai.saveKey,
+                    onGmail: seed.mode === 'draft' && inbox.available ? () => void toGmail() : undefined,
+                    acceptLabel: seed.mode === 'meeting' ? 'crear en Calendar' : undefined,
                     onAccept: () => {
                       const job = ai.job
+                      if (seed.mode === 'meeting' && job?.phase === 'text') {
+                        void createMeeting()
+                        return
+                      }
                       if (job?.phase === 'text' && !job.text.trim()) {
                         // Nothing was written: there's nothing to copy.
                       } else if (job?.phase === 'text') {
