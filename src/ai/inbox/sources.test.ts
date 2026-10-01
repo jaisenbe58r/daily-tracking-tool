@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { candidatesFromEvents, candidatesFromThreads, cleanBody, describeCandidates, shortlist, type GmailThread } from './sources'
+import { candidatesFromEvents, candidatesFromThreads, cleanBody, describeCandidates, participants, replyHeaders, shortlist, type GmailThread } from './sources'
 import { finish } from './extract'
 
 const me = new Set(['yo@captia.com'])
@@ -77,5 +77,21 @@ describe('finish', () => {
       { op: 'add', text: 'Responder invitación: Kick-off', parent: null, tags: [], due: '2026-10-01', source: { app: 'calendar', url: 'https://www.google.com/calendar/event?eid=1', id: 'e1' } },
       { op: 'add', text: 'Sin origen', parent: null, tags: [], due: null },
     ])
+  })
+})
+
+describe('replyHeaders', () => {
+  it('answers whoever wrote last, the rest in copy, never me', () => {
+    const t = thread('r', [
+      { id: 'r1', sender: 'yo@captia.com', labelIds: ['SENT'], toRecipients: ['ana@cliente.es'], subject: 'Presupuesto' },
+      { id: 'r2', sender: 'Ana <ana@cliente.es>', toRecipients: ['yo@captia.com', 'luis@cliente.es'], ccRecipients: ['marta@cliente.es'], subject: 'Re: Presupuesto' },
+    ])
+    expect(replyHeaders(t, new Set())).toEqual({ to: ['ana@cliente.es'], cc: ['luis@cliente.es', 'marta@cliente.es'], subject: 'Re: Presupuesto', replyToMessageId: 'r2' })
+    expect(participants(t, new Set(['yo@captia.com']))).toEqual(['ana@cliente.es', 'luis@cliente.es', 'marta@cliente.es'])
+  })
+
+  it('after my own message (waiting), goes to the people I wrote to', () => {
+    const t = thread('w', [{ id: 'w1', sender: 'yo@captia.com', labelIds: ['SENT'], toRecipients: ['Marta <marta@proveedor.es>'], ccRecipients: ['jefe@captia.com'], subject: 'Re: Planos' }])
+    expect(replyHeaders(t, new Set())).toEqual({ to: ['marta@proveedor.es'], cc: ['jefe@captia.com'], subject: 'Re: Planos', replyToMessageId: 'w1' })
   })
 })

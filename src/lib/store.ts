@@ -64,6 +64,9 @@ export type Action =
   | { type: 'set-repeat'; id: string; repeat: Repeat | null }
   | { type: 'toggle-collapse'; id: string }
   | { type: 'remove'; id: string; focusPrev?: boolean }
+  /** Several tasks at once (a row selection), one undo step. */
+  | { type: 'remove-many'; ids: string[] }
+  | { type: 'done-many'; ids: string[] }
   | { type: 'focus'; id: string; target?: Focus['target']; caret?: Caret }
   /** Opens every collapsed parent above the task, then focuses it (coming back from the memory). */
   | { type: 'reveal'; id: string }
@@ -252,6 +255,34 @@ function reducer(state: State, action: Exclude<Action, { type: 'undo' | 'redo' }
         tasks: next,
         focus: action.focusPrev === false ? null : focusOn(neighbour.id === action.id ? next[0].id : neighbour.id),
       }
+    }
+
+    case 'remove-many': {
+      const gone = new Set(action.ids)
+      const rows = tree.flatten(tasks)
+      const first = rows.findIndex((r) => gone.has(r.task.id))
+      let next = tasks
+      for (const id of action.ids) next = tree.remove(next, id)
+      if (next === tasks) return state
+      if (!next.length) next = [tree.newTask()]
+      const kept = new Set(next.map((t) => t.id))
+      const neighbour = rows.slice(0, Math.max(first, 0)).reverse().find((r) => kept.has(r.task.id))?.task
+        ?? rows.slice(first).find((r) => kept.has(r.task.id))?.task
+        ?? next[0]
+      return { tasks: next, focus: focusOn(neighbour.id) }
+    }
+
+    case 'done-many': {
+      // All done already: reopen them all; otherwise close what's open.
+      const picked = tasks.filter((t) => action.ids.includes(t.id))
+      const status: Status = picked.every((t) => t.status === 'done') ? 'todo' : 'done'
+      let next = tasks
+      for (const task of picked) {
+        if (task.status === status) continue
+        next = tree.update(next, task.id, withStatus(task, status))
+        if (status === 'done') next = plantNext(next, task.id, dateKey(new Date()))
+      }
+      return { ...state, tasks: next }
     }
 
     case 'focus':
