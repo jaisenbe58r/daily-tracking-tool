@@ -8,6 +8,7 @@ import { daysAway, daysWaiting, isBack, isSnoozed, WAITING_TAG } from '../lib/sn
 import { dueLabel } from '../lib/parse'
 import { useNotice } from '../lib/teach'
 import { useHasDraft } from '../ai/drafts'
+import { hasMark, segments, toggleMark } from '../lib/mark'
 
 const SOURCE_APP: Record<Source['app'], string> = { gmail: 'Gmail', calendar: 'Google Calendar', granola: 'Granola' }
 const SOURCE_LABEL: Record<Source['app'], string> = { gmail: 'Gmail', calendar: 'Agenda', granola: 'Granola' }
@@ -163,6 +164,12 @@ function TaskRowImpl({ row, focus, dragging, dispatch, onOpenActions, onDragStar
     } else if (e.altKey && e.code === 'KeyH') {
       e.preventDefault()
       dispatch({ type: 'toggle-today', id: task.id })
+    } else if (e.altKey && e.code === 'KeyU') {
+      e.preventDefault()
+      const next = toggleMark(el.value, el.selectionStart, el.selectionEnd)
+      if (next.text === el.value) return
+      dispatch({ type: 'edit', id: task.id, patch: { text: next.text } })
+      requestAnimationFrame(() => el.setSelectionRange(next.start, next.end))
     } else if (e.altKey && e.code === 'KeyL') {
       e.preventDefault()
       dispatch({ type: 'commit', id: task.id })
@@ -198,6 +205,23 @@ function TaskRowImpl({ row, focus, dragging, dispatch, onOpenActions, onDragStar
   }
 
   const statusLabel = task.status === 'done' ? 'Hecha' : task.status === 'doing' ? 'En curso' : 'Pendiente'
+
+  const marked = hasMark(task.text)
+  const textarea = (
+    <textarea
+      ref={textRef}
+      className="text"
+      data-task-text={task.id}
+      rows={1}
+      value={task.text}
+      placeholder={depth === 0 ? 'Escribe una tarea…   #tag   !   mañana' : 'Subtarea…'}
+      spellCheck={false}
+      onChange={(e) => dispatch({ type: 'edit', id: task.id, patch: { text: e.target.value } })}
+      onKeyDown={onTextKey}
+      onPaste={onPaste}
+      onBlur={() => dispatch({ type: 'commit', id: task.id })}
+    />
+  )
 
   return (
     <div
@@ -272,19 +296,27 @@ function TaskRowImpl({ row, focus, dragging, dispatch, onOpenActions, onDragStar
               !
             </span>
           )}
-          <textarea
-            ref={textRef}
-            className="text"
-            data-task-text={task.id}
-            rows={1}
-            value={task.text}
-            placeholder={depth === 0 ? 'Escribe una tarea…   #tag   !   mañana' : 'Subtarea…'}
-            spellCheck={false}
-            onChange={(e) => dispatch({ type: 'edit', id: task.id, patch: { text: e.target.value } })}
-            onKeyDown={onTextKey}
-            onPaste={onPaste}
-            onBlur={() => dispatch({ type: 'commit', id: task.id })}
-          />
+          {/* Always this wrapper, so the editor keeps its focus when a highlight comes or goes. */}
+          <div className={marked ? 'text text-marked' : 'text-plain'}>
+            {marked && (
+              // The words drawn behind the (see-through) editor, highlights included.
+              <div className="text-ink" aria-hidden>
+                {segments(task.text, true).map((seg, i) =>
+                  seg.marked ? (
+                    <mark key={i}>
+                      <span className="mark-sign">==</span>
+                      {seg.text.slice(2, -2)}
+                      <span className="mark-sign">==</span>
+                    </mark>
+                  ) : (
+                    <span key={i}>{seg.text}</span>
+                  ),
+                )}
+                {'\u200b'}
+              </div>
+            )}
+            {textarea}
+          </div>
           {task.snooze && isSnoozed(task, today) && (
             <span className="snooze" data-state="away" title={`Pospuesta hasta ${dueLabel(task.snooze.until, new Date(`${today}T12:00`)).toLowerCase()} (${isMac ? '⌥' : 'Alt+'}L la devuelve)`}>
               → {dueLabel(task.snooze.until, new Date(`${today}T12:00`)).toLowerCase()}

@@ -5,6 +5,7 @@ import { useToday } from '../lib/today'
 import { dueLabel } from '../lib/parse'
 import { isSnoozed, resolveSnooze, snoozeChoices } from '../lib/snooze'
 import { isShortcut, useNotice } from '../lib/teach'
+import { hasMark, plain, toggleMark } from '../lib/mark'
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
 const M = isMac ? '⌘' : 'Ctrl '
@@ -94,6 +95,16 @@ export function QuickActions({ task, hasChildren, anchor, dispatch, extra, onClo
             { label: 'Posponer…', hint: `${A}L`, keywords: 'posponer snooze luego recordar ocultar', stay: true, run: () => openSub('snooze') },
             { label: 'Esperando…', keywords: 'esperando respuesta seguimiento perseguir follow', stay: true, run: () => openSub('wait') },
           ]),
+      {
+        label: hasMark(task.text) ? 'Quitar subrayado' : 'Subrayar',
+        hint: `${A}U`,
+        keywords: 'subrayar resaltar destacar marcar highlight verde',
+        run: () => {
+          const text = hasMark(task.text) ? plain(task.text) : toggleMark(task.text, 0, 0).text
+          dispatch({ type: 'edit', id, patch: { text } })
+          focusText()
+        },
+      },
       {
         label: task.priority ? 'Quitar prioridad' : 'Prioridad',
         hint: '!',

@@ -2,6 +2,7 @@ import { useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type Po
 import { inheritFromFilters, matches, parentPath } from '../lib/organize'
 import type { Action } from '../lib/store'
 import { DueLabel } from './DueLabel'
+import { segments } from '../lib/mark'
 import { useToday } from '../lib/today'
 import { flatten } from '../lib/tree'
 import type { Filters, Inherit, Status, Task } from '../lib/types'
@@ -235,7 +236,7 @@ export function BoardView({ tasks, dispatch, filters, onTagClick }: Props) {
                         }}
                       />
                     ) : (
-                      <p className="card-text">{task.text}</p>
+                      <p className="card-text"><Marked text={task.text} /></p>
                     )}
                   </div>
                   {(task.tags.length > 0 || total > 0 || task.due || task.priority) && (
@@ -277,7 +278,7 @@ export function BoardView({ tasks, dispatch, filters, onTagClick }: Props) {
           aria-hidden
         >
           {dragged.context && <div className="card-context">{dragged.context}</div>}
-          <p className="card-text">{dragged.task.text}</p>
+          <p className="card-text"><Marked text={dragged.task.text} /></p>
         </article>
       )}
     </div>
@@ -345,4 +346,9 @@ function AddCard({ status, label, inherit, dispatch }: { status: Status; label: 
       }}
     />
   )
+}
+
+/** A card's text with its highlights (`==…==`) drawn as green blocks. */
+function Marked({ text }: { text: string }) {
+  return <>{segments(text).map((seg, i) => (seg.marked ? <mark key={i}>{seg.text}</mark> : seg.text))}</>
 }

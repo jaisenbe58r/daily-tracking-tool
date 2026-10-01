@@ -1,7 +1,8 @@
 /*
  * Captia palette (captia-technology/captia-design, comun/color.md):
  * paper, ink, grey and hairline. The brand green is used only as a filled
- * block with black on top, and only to mark what's done.
+ * block with black on top: to mark what's done and the words highlighted
+ * with ==…== (Subrayar, Alt+U).
  */
 :root {
   --paper: #ffffff;
@@ -1235,3 +1236,38 @@ button.plan-card:focus-visible { outline: 1px solid var(--ink); outline-offset: 
 }
 .capture-panel .plan { margin: 4px 0 2px; }
 @media (pointer: coarse) { .plan-clear { width: 36px; height: 36px; margin-top: 2px; opacity: 1; } }
+
+/*
+ * Subrayado (`==frase==`, Alt+U): the Captia highlight, a solid green block
+ * with black words on it. In the list the editor turns see-through and the
+ * same words are drawn behind it, highlights included, glyph for glyph.
+ */
+mark {
+  background: var(--green);
+  color: var(--on-green);
+  padding: 0 0.3em;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+.text-ink mark { padding: 0; }
+.text-plain { display: contents; }
+.text-marked { position: relative; height: auto; min-height: 24px; }
+.text-ink,
+.text-marked > textarea {
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+.text-ink { position: absolute; inset: 0; pointer-events: none; }
+.text-marked > textarea {
+  position: relative;
+  -webkit-text-fill-color: transparent;
+  caret-color: var(--ink);
+  text-decoration: none;
+}
+/* The selection has to let the words behind it show through. */
+.text-marked > textarea::selection { background: color-mix(in srgb, var(--ink) 18%, transparent); }
+/* The markers only show while writing; otherwise they're the block's margin. */
+.mark-sign { color: color-mix(in srgb, var(--on-green) 35%, var(--green)); transition: color 120ms; }
+.text-marked:not(:focus-within) .mark-sign { color: transparent; }
+.row[data-status='done'] mark,
+.card[data-status='done'] mark { background: var(--wash-strong); color: inherit; }
