@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Task } from '../lib/types'
 import { apiKey, probeAi, type AiMode } from './config'
-import { applyOps, idsFor, snapshot, type Change, type Op } from './ops'
+import { applyOps, idsFor, picksOf, snapshot, type Change, type Op } from './ops'
+
+type PlanPick = ReturnType<typeof picksOf>[number]
 
 export type AiJob =
   /** `changes`/`text` fill in while the answer streams, so the preview grows line by line. */
   | { phase: 'thinking'; request: string; changes?: Change[]; text?: string }
-  | { phase: 'proposal'; request: string; summary: string; changes: Change[]; next: Task[]; base: Task[] }
+  /** `picks`: the existing tasks it touches, in its order, with its reason for each (Plan del día). */
+  | { phase: 'proposal'; request: string; summary: string; changes: Change[]; next: Task[]; base: Task[]; picks: PlanPick[] }
   | { phase: 'text'; request: string; text: string }
   | { phase: 'error'; request: string; message: string }
   /** Key mode with no key (or a refused one): the panel asks for it, then the request goes out. */
@@ -85,7 +88,7 @@ export function useAi(tasks: Task[], today: string) {
       })
       if (ctrl.signal.aborted) return
       const { tasks: next, changes } = applyOps(base, proposal.ops, snap.refs, latest.current.today)
-      setJob({ phase: 'proposal', request, summary: proposal.summary, changes, next, base })
+      setJob({ phase: 'proposal', request, summary: proposal.summary, changes, next, base, picks: picksOf(proposal.ops, snap.refs) })
     } catch (error) {
       if (!ctrl.signal.aborted) failed(request, error, () => void ask(request, selectedId, extra))
     }
@@ -145,7 +148,7 @@ export function useAi(tasks: Task[], today: string) {
     }
     const base = latest.current.tasks
     const { tasks: next, changes } = applyOps(base, found.ops, found.refs, latest.current.today)
-    setJob({ phase: 'proposal', request, summary: found.summary, changes, next, base })
+    setJob({ phase: 'proposal', request, summary: found.summary, changes, next, base, picks: picksOf(found.ops, found.refs) })
   }, [])
 
   /** Text worked out earlier (a kept draft), shown like a fresh answer. */

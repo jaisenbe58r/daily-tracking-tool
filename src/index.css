@@ -1043,3 +1043,152 @@ kbd {
   .m-tile + .m-tile { padding-left: 0; border-left: 0; border-top: 1px solid var(--rule); }
   .m-month { grid-template-columns: minmax(0, 1fr); gap: 4px; }
 }
+
+/* ── Plan del día: a short workflow above the list ───── */
+
+.plan {
+  --plan-gap: 28px;
+  container-type: inline-size;
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 4px;
+}
+.plan-steps {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  gap: var(--plan-gap);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.plan-step { position: relative; flex: 1 1 0; min-width: 0; }
+/* The hairline to the next step, at the marker's height; ink once that step is behind. */
+.plan-step:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 21px;
+  left: 100%;
+  width: var(--plan-gap);
+  height: 1px;
+  background: linear-gradient(var(--ink), var(--ink)) left / 0 100% no-repeat, var(--rule);
+  transition: background-size 360ms var(--ease);
+}
+.plan-step[data-passed]::after { background-size: 100% 100%; }
+
+.plan-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  height: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  text-align: left;
+  transition: border-color 200ms var(--ease), background 140ms;
+}
+button.plan-card:hover { background: var(--wash); }
+button.plan-card:focus-visible { outline: 1px solid var(--ink); outline-offset: 2px; }
+.plan-step[data-state='now'] .plan-card { border-color: var(--ink); }
+
+.plan-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 16px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--grey);
+}
+.plan-mark {
+  flex: 0 0 16px;
+  height: 16px;
+  display: grid;
+  place-items: center;
+  border: 1.25px solid var(--ink-soft);
+  border-radius: 4px;
+  font-size: 10px;
+  letter-spacing: 0;
+  color: var(--grey);
+}
+.plan-step[data-state='now'] .plan-mark { border-color: var(--ink); background: var(--ink); color: var(--paper); }
+.plan-step[data-state='now'] .plan-state { color: var(--ink); }
+.plan-step[data-state='done'] .plan-mark {
+  border-color: var(--on-green);
+  background: var(--green);
+  color: var(--on-green);
+  animation: check-pop 220ms var(--ease);
+}
+
+.plan-text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font-size: 14px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+.plan-step[data-state='now'] .plan-text { font-weight: 500; }
+.plan-step[data-state='done'] .plan-text { color: var(--grey); text-decoration: line-through; text-decoration-color: var(--rule); }
+.plan-project {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 14px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--grey);
+}
+.plan-why { font-size: 12px; line-height: 17px; color: var(--grey); }
+
+.plan-clear {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  margin-top: 9px;
+  border-radius: 4px;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--grey);
+  opacity: 0.6;
+  transition: opacity 120ms, color 120ms;
+}
+.plan:hover .plan-clear, .plan-clear:focus-visible { opacity: 1; }
+.plan-clear:hover { color: var(--ink); background: var(--wash-strong); }
+
+/* Narrow (a phone, the capture line's preview): one step per line, the hairline running down. */
+@container (max-width: 560px) {
+  .plan-steps { --plan-gap: 10px; flex-direction: column; }
+  .plan-step:not(:last-child)::after {
+    top: 100%;
+    left: 22px;
+    width: 1px;
+    height: var(--plan-gap);
+    background: linear-gradient(var(--ink), var(--ink)) top / 100% 0 no-repeat, var(--rule);
+  }
+  .plan-step[data-passed]::after { background-size: 100% 100%; }
+  .plan-card {
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr) auto;
+    column-gap: 12px;
+    row-gap: 2px;
+    padding: 9px 12px 9px 14px;
+  }
+  .plan-head { display: contents; }
+  .plan-mark { grid-column: 1; grid-row: 1; margin-top: 2px; }
+  .plan-state { grid-column: 3; grid-row: 1; align-self: center; }
+  .plan-text { grid-column: 2; grid-row: 1; -webkit-line-clamp: 1; line-height: 20px; }
+  .plan-project, .plan-why { grid-column: 2 / 4; }
+}
+.capture-panel .plan { margin: 4px 0 2px; }
+@media (pointer: coarse) { .plan-clear { width: 36px; height: 36px; margin-top: 2px; opacity: 1; } }
