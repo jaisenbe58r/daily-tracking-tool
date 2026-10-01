@@ -35,18 +35,19 @@ describe('Cerrar el bucle', () => {
       { id: 'm2', sender, date, labelIds: labels, plaintextBody: 'Adjunto los datos.\n\nEl lun escribió:\n> hola' },
     ],
   })
-  const w = { taskId: 'task1', threadId: 'th1', since: Date.parse('2026-09-28T10:00:00Z') }
+  const w = { taskId: 'task1', threadId: 'th1', since: Date.parse('2026-09-28T10:00:00Z'), waiting: true }
   const me = new Set(['jaime@captiatechnology.com'])
 
-  it('watches open mail tasks tagged #esperando or found waiting, not the rest', () => {
+  it('watches every open mail task, the waiting ones first', () => {
     const tasks = [
+      t({ id: 'c', createdAt: 3, source: gmail('u', { id: 'th3' }) }),
       t({ id: 'a', tags: ['esperando'], source: gmail('u', { id: 'th1' }) }),
       t({ id: 'b', source: gmail('u', { id: 'th2', waiting: true }) }),
-      t({ id: 'c', source: gmail('u', { id: 'th3' }) }),
       t({ id: 'd', tags: ['esperando'], status: 'done', source: gmail('u', { id: 'th4' }) }),
       t({ id: 'e', tags: ['esperando'] }),
+      t({ id: 'f', source: { app: 'calendar', url: 'u', id: 'ev' } }),
     ]
-    expect(watchedTasks(tasks).map((x) => x.taskId)).toEqual(['a', 'b'])
+    expect(watchedTasks(tasks).map((x) => [x.taskId, x.waiting])).toEqual([['a', true], ['b', true], ['c', false]])
   })
 
   it('sees a reply from someone else after the task was written', () => {
@@ -58,6 +59,15 @@ describe('Cerrar el bucle', () => {
     expect(replyCandidate(thread('Yo <jaime@captiatechnology.com>', '2026-09-29T08:00:00Z', ['SENT']), w, me)).toBeNull()
     expect(replyCandidate(thread('Ana <ana@elpozo.es>', '2026-09-27T08:00:00Z'), w, me)).toBeNull()
     expect(replyCandidate(thread('noreply@elpozo.es', '2026-09-29T08:00:00Z'), w, me)).toBeNull()
+  })
+
+  it('on a task not waiting, my own later reply counts too, with what was said since', () => {
+    const v = { ...w, waiting: false }
+    const mineLast = thread('Yo <jaime@captiatechnology.com>', '2026-09-29T08:00:00Z', ['SENT'])
+    const c = replyCandidate(mineLast, v, me)
+    expect(c).toMatchObject({ kind: 'followup', id: 'th1', version: 'm2', taskId: 'task1', from: 'yo', body: 'yo: Adjunto los datos.' })
+    expect(replyCandidate(thread('Ana <ana@elpozo.es>', '2026-09-27T08:00:00Z'), v, me)).toBeNull()
+    expect(replyCandidate(thread('noreply@elpozo.es', '2026-09-29T08:00:00Z'), v, me)).toBeNull()
   })
 
   it('lets the model close only the tasks a reply answered', () => {

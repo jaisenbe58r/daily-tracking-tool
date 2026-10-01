@@ -201,7 +201,7 @@ const GRANOLA_DAYS = 14
 /** Notes read in full per check. The rest waits for the next one. */
 const MAX_MEETINGS = 20
 
-/** Threads the user is waiting on, read again: did someone answer since the task was written? */
+/** Threads behind open tasks, read again: did someone answer, or the user, since the task was written? */
 async function replies(m: Mcp, me: Set<string>, watched: Watched[]): Promise<Candidate[]> {
   const found = await pool(watched.slice(0, MAX_WATCHED), 4, async (w) => {
     const thread = await call<GmailThread>(m, GMAIL, 'get_thread', { threadId: w.threadId, messageFormat: 'PLAIN_TEXT' }).catch(() => null)
@@ -209,7 +209,7 @@ async function replies(m: Mcp, me: Set<string>, watched: Watched[]): Promise<Can
   })
   return found.filter((c): c is Candidate => c !== null)
 }
-const MAX_WATCHED = 15
+const MAX_WATCHED = 25
 
 export interface Gathered {
   candidates: Candidate[]
@@ -263,7 +263,7 @@ export async function gather(seen: Seen, watched: Watched[] = [], known: Set<str
   const events = await calendar(m, me, now, scanned).catch(failed(CALENDAR, 'Agenda'))
   const mails = await gmail(m, me, now, seen, scanned).catch(failed(GMAIL, 'Gmail'))
   const notes = await granola(m, now, seen, known, scanned).catch(failed(GRANOLA, 'Granola'))
-  // Replies first: a thread that answers a waiting task is that, not a new question.
+  // Replies first: a thread behind a task is news about that task, not a new question.
   const answers = await replies(m, me, watched).catch(() => [])
   const candidates = dedupe([...answers, ...mails, ...events, ...notes]).filter((c) => !seen(c))
   return { candidates, problems, scanned }

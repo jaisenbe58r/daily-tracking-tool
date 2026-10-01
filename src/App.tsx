@@ -776,7 +776,7 @@ export default function App() {
                     {!inbox.replies
                       ? `${inbox.count === 1 ? 'tarea' : 'tareas'} ${inbox.meetings === inbox.count ? 'de tus reuniones' : inbox.meetings ? 'por recoger' : 'en tu correo'}`
                       : inbox.replies === inbox.count
-                        ? `${inbox.count === 1 ? 'respuesta' : 'respuestas'} en tu correo`
+                        ? `${inbox.count === 1 ? 'tarea resuelta' : 'tareas resueltas'} en tu correo`
                         : 'novedades en tu correo'}
                   </span>
                 </button>
