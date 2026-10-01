@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { hash, join, merge, plan, readSheet, serialize, split, type Sheet } from './cloud'
+import { hash, join, merge, plan, readSheet, serialize, split, weekOf, weeksToWrite, type Sheet } from './cloud'
+import type { LogEvent } from '../memory/log'
 import { sanitize } from './persist'
 
 const sheet = (...texts: string[]): Sheet => ({
@@ -66,5 +67,31 @@ describe('cloud', () => {
 
   it('merge never brings back empty rows', () => {
     expect(merge(sheet('A'), sheet('')).tasks.map((t) => t.text)).toEqual(['A'])
+  })
+})
+
+describe('cloud history', () => {
+  const ev = (at: number, id = 'a', kind: LogEvent['kind'] = 'create'): LogEvent => ({ at, id, kind })
+  const monday = new Date(2026, 8, 28, 10).getTime()
+  const sunday = new Date(2026, 9, 4, 22).getTime()
+  const nextMonday = new Date(2026, 9, 5, 8).getTime()
+
+  it('groups by the week starting on Monday', () => {
+    expect(weekOf(monday)).toBe('2026-09-28')
+    expect(weekOf(sunday)).toBe('2026-09-28')
+    expect(weekOf(nextMonday)).toBe('2026-10-05')
+  })
+
+  it('writes only the weeks where this device has something new, keeping what the store has', () => {
+    const remote = new Map([['2026-09-28', [ev(monday), ev(sunday, 'b')]]])
+    const out = weeksToWrite([ev(monday), ev(sunday + 1, 'c', 'done'), ev(nextMonday)], remote)
+    expect([...out.keys()]).toEqual(['2026-09-28', '2026-10-05'])
+    expect(out.get('2026-09-28')!.map((e) => e.id)).toEqual(['a', 'b', 'c'])
+    expect(weeksToWrite([ev(monday)], remote).size).toBe(0)
+  })
+
+  it('never writes the same event twice', () => {
+    const out = weeksToWrite([ev(monday), ev(monday)], new Map())
+    expect(out.get('2026-09-28')).toHaveLength(1)
   })
 })

@@ -113,6 +113,8 @@ export function useEventLog(tasks: Task[], external: boolean) {
   const base = useRef(tasks)
   const pending = useRef<LogEvent[]>([])
   const ready = useRef(false)
+  /** The stored history is in `log`: safe to merge into without writing an event twice. */
+  const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
     let alive = true
@@ -123,6 +125,7 @@ export function useEventLog(tasks: Task[], external: boolean) {
         ready.current = true
         void append(pending.current).catch(() => {})
         pending.current = []
+        if (alive) setLoaded(true)
       })
     return () => {
       alive = false
@@ -158,5 +161,5 @@ export function useEventLog(tasks: Task[], external: boolean) {
     void append(fresh).catch(() => {})
   }, [])
 
-  return { log, merge }
+  return { log, merge, loaded }
 }
