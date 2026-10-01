@@ -312,8 +312,11 @@ const HISTORY_LIMIT = 200
 function withHistory(state: AppState, action: Action): AppState {
   if (action.type === 'undo' || action.type === 'redo') {
     const [from, to] = action.type === 'undo' ? (['past', 'future'] as const) : (['future', 'past'] as const)
-    const snapshot = state[from].at(-1)
-    if (!snapshot) return state
+    const past = state[from].at(-1)
+    if (!past) return state
+    // Undoing a highlight keeps the "AI already looked" mark, so it isn't highlighted again.
+    const looked = new Set(state.tasks.filter((t) => t.autoMarked).map((t) => t.id))
+    const snapshot = looked.size ? past.map((t) => (looked.has(t.id) && !t.autoMarked ? { ...t, autoMarked: true } : t)) : past
     return {
       ...state,
       tasks: snapshot,

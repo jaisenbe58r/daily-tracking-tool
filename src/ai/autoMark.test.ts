@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { candidates, markPhrase } from './autoMark'
+import { backlog, candidates, markPhrase } from './autoMark'
 import { newTask } from '../lib/tree'
 import { sanitize } from '../lib/persist'
 
@@ -45,5 +45,22 @@ describe('candidates', () => {
   it('remembers the flag across saves', () => {
     expect(sanitize([task('Una tarea cualquiera', { autoMarked: true })])[0].autoMarked).toBe(true)
     expect('autoMarked' in sanitize([task('Otra tarea cualquiera')])[0]).toBe(false)
+  })
+})
+
+describe('backlog', () => {
+  const now = Date.now()
+  const old = (text: string, patch = {}) => ({ ...newTask(null, text), createdAt: now - 86_400_000, ...patch })
+
+  it('takes what was already on the sheet, open and not looked at', () => {
+    const open = old('Enviar oferta a ZimVie')
+    const list = [
+      open,
+      { ...newTask(null, 'Recién escrita hace nada'), createdAt: now },
+      old('Ya mirada por la IA', { autoMarked: true }),
+      old('Cerrada la semana pasada', { status: 'done' }),
+      old('Con ==subrayado== ya puesto'),
+    ]
+    expect(backlog(list, now, null)).toEqual([open])
   })
 })
