@@ -15,7 +15,7 @@ npm run build
 
 Los datos se guardan solos en `localStorage` del navegador (clave `daily-tracking-tool:v1`) y se sincronizan entre pestañas abiertas. Al cargar se validan y se reparan (campos que faltan, tareas huérfanas o ciclos), así que un dato corrupto nunca deja la hoja inservible.
 
-Dentro de claude.ai cada enlace de artifact es un sitio distinto, así que el navegador guarda una hoja aparte por enlace y por dispositivo. Por eso, cuando la app se publica como artifact con las capacidades `db` y `user`, la hoja y las plantillas se guardan además en la base de datos del propio artifact, en tu parte privada (`data/users/<tu id>/folio-*`): la misma hoja en todos tus dispositivos y en cada versión republicada de ese enlace. La primera vez sube lo que haya en ese navegador; si dos dispositivos cambiaron a la vez, se unen las tareas de ambos. El historial de la Memoria sigue solo en el navegador (va en la copia JSON).
+Dentro de claude.ai cada enlace de artifact es un sitio distinto, así que el navegador guarda una hoja aparte por enlace y por dispositivo. Por eso, cuando la app se publica como artifact con las capacidades `db` y `user`, la hoja y las plantillas se guardan además en la base de datos del propio artifact, en tu parte privada (`data/users/<tu id>/folio-*`): la misma hoja en todos tus dispositivos y en cada versión republicada de ese enlace. La primera vez sube lo que haya en ese navegador; si dos dispositivos cambiaron a la vez, se unen las tareas de ambos. El historial de la Memoria viaja igual, un documento por semana (`data/users/<tu id>/memoria/weeks/<lunes>`): cada dispositivo añade lo que le falta al otro y nunca se borra nada.
 
 ## Escribir rápido
 

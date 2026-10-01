@@ -3,6 +3,8 @@ import { claudeHost } from '../ai/config'
 import { sanitize } from './persist'
 import { sanitizeTemplates, type Template } from './templates'
 import type { Task } from './types'
+import { sanitizeLog, type LogEvent } from '../memory/log'
+import { dateKey } from './parse'
 
 /**
  * Inside claude.ai each artifact link is its own site, so the browser keeps a
@@ -158,13 +160,14 @@ interface User {
   id(): Promise<string | null>
 }
 
-async function openStore(): Promise<Collection | null> {
+/** The viewer's private collection at `data/users/<id>` + `sub`, or null outside claude.ai. */
+async function openStore(sub = ''): Promise<Collection | null> {
   const host = claudeHost()
   if (!host) return null
   const [db, user] = await Promise.all([host.use('db').catch(() => null), host.use('user').catch(() => null)])
   if (!db || !user) return null
   const id = await (user as User).id().catch(() => null)
-  return id ? (db as Db).collection(`data/users/${id}`) : null
+  return id ? (db as Db).collection(`data/users/${id}${sub}`) : null
 }
 
 interface Options {
@@ -282,4 +285,134 @@ export function useCloudSync({ tasks, templates, replace, notify }: Options) {
     const timer = setTimeout(() => save.current(), DELAY)
     return () => clearTimeout(timer)
   }, [ready, tasks, templates])
+}
+
+// ── Memoria history ─────────────────────────────────────
+
+/**
+ * The history behind the Memoria only ever grows, so it travels as one
+ * document per week (`data/users/<id>/memoria/weeks/<monday>`) holding that
+ * week's events. Each side adds what the other lacks; nothing is ever removed.
+ */
+const WEEKS = '/memoria/weeks'
+
+const eventKey = (e: LogEvent) => `${e.at}:${e.id}:${e.kind}`
+
+/** The Monday that starts the week of `at`, as YYYY-MM-DD. */
+export function weekOf(at: number): string {
+  const d = new Date(at)
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7))
+  return dateKey(d)
+}
+
+/** For each week where `local` has events `remote` lacks, the week's events as they should be stored. */
+export function weeksToWrite(local: LogEvent[], remote: Map<string, LogEvent[]>): Map<string, LogEvent[]> {
+  const out = new Map<string, LogEvent[]>()
+  const known = new Map<string, Set<string>>()
+  for (const e of local) {
+    const week = weekOf(e.at)
+    let seen = known.get(week)
+    if (!seen) known.set(week, (seen = new Set((remote.get(week) ?? []).map(eventKey))))
+    if (seen.has(eventKey(e))) continue
+    seen.add(eventKey(e))
+    const events = out.get(week) ?? [...(remote.get(week) ?? [])]
+    events.push(e)
+    out.set(week, events)
+  }
+  for (const events of out.values()) events.sort((a, b) => a.at - b.at)
+  return out
+}
+
+interface LogOptions {
+  log: LogEvent[]
+  /** The stored history has been read; until then nothing is merged or written. */
+  loaded: boolean
+  /** Adds events from other devices, skipping the ones already here. */
+  merge: (events: LogEvent[]) => void
+}
+
+/** Keeps the Memoria history in the artifact's store too, merged from every device. */
+export function useCloudLog({ log, loaded, merge }: LogOptions) {
+  const latest = useRef(log)
+  const mergeRef = useRef(merge)
+  useEffect(() => {
+    latest.current = log
+    mergeRef.current = merge
+  })
+  const save = useRef(() => {})
+  const [ready, setReady] = useState(false)
+
+  useEffect(() => {
+    if (!loaded) return
+    let stop = () => {}
+    let alive = true
+    let store: Collection | null = null
+    /** What the store holds, week by week, as of the last snapshot or our own write. */
+    const remote = new Map<string, LogEvent[]>()
+    let busy = false
+    let again = false
+
+    const write = async () => {
+      if (!store) return
+      if (busy) {
+        again = true
+        return
+      }
+      const weeks = weeksToWrite(latest.current, remote)
+      if (!weeks.size) return
+      busy = true
+      try {
+        for (const [week, events] of weeks) {
+          await store.doc(week).set({ events })
+          remote.set(week, events)
+        }
+      } catch (e) {
+        const code = (e as { code?: string })?.code
+        if (code === 'unavailable') again = true
+      } finally {
+        busy = false
+        if (again && alive) {
+          again = false
+          setTimeout(() => void write(), DELAY)
+        }
+      }
+    }
+    save.current = () => void write()
+
+    void openStore(WEEKS).then((found) => {
+      if (!found || !alive) return
+      store = found
+      stop = found.onSnapshot(
+        (snap) => {
+          if (snap.metadata.fromCache) return
+          const incoming: LogEvent[] = []
+          for (const d of snap.docs) {
+            if (!d.exists) continue
+            // A stale or overwritten week only means a write adds back what it lacks.
+            const events = sanitizeLog(d.data()?.events)
+            remote.set(d.id, events)
+            incoming.push(...events)
+          }
+          if (incoming.length) mergeRef.current(incoming)
+          setReady(true)
+          void write()
+        },
+        () => {
+          store = null
+        },
+      )
+    })
+
+    return () => {
+      alive = false
+      stop()
+      save.current = () => {}
+    }
+  }, [loaded])
+
+  useEffect(() => {
+    if (!ready) return
+    const timer = setTimeout(() => save.current(), DELAY)
+    return () => clearTimeout(timer)
+  }, [ready, log])
 }

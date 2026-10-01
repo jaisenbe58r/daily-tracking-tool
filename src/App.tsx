@@ -28,7 +28,7 @@ import { snapshot } from './ai/ops'
 import { hideSnoozed, snoozedCount } from './lib/snooze'
 import { NoticeContext, useNoticeValue } from './lib/teach'
 import { useEventLog } from './memory/log'
-import { useCloudSync, type Sheet } from './lib/cloud'
+import { useCloudLog, useCloudSync, type Sheet } from './lib/cloud'
 
 // The memory is its own view: loaded the first time it opens, so the sheet stays light.
 const MemoryView = lazy(() => import('./memory/MemoryView'))
@@ -108,7 +108,8 @@ export default function App() {
   useEffect(() => {
     aiReady.current = ai.available
   }, [ai.available])
-  const { log, merge: mergeLog } = useEventLog(state.tasks, state.external)
+  const { log, merge: mergeLog, loaded: logLoaded } = useEventLog(state.tasks, state.external)
+  useCloudLog({ log, loaded: logLoaded, merge: mergeLog })
   /** Plan del día: the strip above the list, kept until midnight. */
   const [plan, setPlan] = usePlan(todayKey)
   const steps = useMemo(() => planSteps(plan, state.tasks, todayKey), [plan, state.tasks, todayKey])
