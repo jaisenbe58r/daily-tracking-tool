@@ -329,13 +329,14 @@ export default function App() {
       const got = await take()
       if (run !== captureRun.current) return // closed meanwhile: what was found keeps waiting in the header
       if ('found' in got) {
-        present(RECOGER, got.found)
+        // Second line: what was read, so it's clear every source was looked at.
+        present(RECOGER, got.found.scan ? { ...got.found, summary: `${got.found.summary}\nLeído: ${got.found.scan}` } : got.found)
         clear(got.found)
       } else {
         cancelAi()
         setCapturing(false)
         restoreFocus()
-        notify(got.problem ?? 'Nada nuevo en tu correo, tu agenda ni tus reuniones')
+        notify(got.problem ?? (got.scan ? `Nada nuevo. Leído: ${got.scan}` : 'Nada nuevo en tu correo, tu agenda ni tus reuniones'))
       }
     } catch (error) {
       if (run === captureRun.current) fail(RECOGER, error)
@@ -731,7 +732,7 @@ export default function App() {
                           before.has(t.id) ? t : { ...t, due: t.due ?? inherit.due ?? null, tags: [...new Set([...t.tags, ...(inherit.tags ?? [])])] },
                         )
                         dispatch({ type: 'apply', tasks: next })
-                        notify(`${job.summary} · ${isMac ? '⌘' : 'Ctrl+'}Z deshace`)
+                        notify(`${job.summary.split('\n')[0]} · ${isMac ? '⌘' : 'Ctrl+'}Z deshace`)
                       } else return
                       ai.cancel()
                       setCapturing(false)
