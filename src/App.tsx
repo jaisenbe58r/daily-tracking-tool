@@ -7,6 +7,7 @@ import type { QuickItem } from './components/QuickActions'
 import { QuickCapture } from './components/QuickCapture'
 import { SearchBar, type MeaningSearch } from './components/SearchBar'
 import { Toolbar } from './components/Toolbar'
+import { PlanStrip } from './components/PlanStrip'
 import { exportTasks, readBackup } from './lib/backup'
 import { allTags, inheritFromFilters, isFiltering, matches, organize } from './lib/organize'
 import { usePrefs, type View } from './lib/prefs'
@@ -15,6 +16,7 @@ import { RESCUE_KEY, rescued } from './lib/persist'
 import { dateKey, parseTask } from './lib/parse'
 import { TodayContext } from './lib/today'
 import { dailySummary, subtreeOutline } from './lib/daily'
+import { MAX_STEPS, planFromPicks, planSteps, togglePlanned, usePlan } from './lib/plan'
 import { useTemplates } from './lib/templates'
 import { descendantIds } from './lib/tree'
 import { useAi } from './ai/useAi'
@@ -37,7 +39,8 @@ interface Seed {
   taskId: string | null
   /** Shown in the line. */
   text: string
-  mode: 'changes' | 'summary' | 'draft'
+  /** `plan`: changes too, and applying them also sets the day's plan. */
+  mode: 'changes' | 'summary' | 'draft' | 'plan'
   /** Sent instead of `text` while the line still shows it (a short label for a long instruction). */
   request?: string
 }
@@ -93,14 +96,17 @@ export default function App() {
     aiReady.current = ai.available
   }, [ai.available])
   const { log, merge: mergeLog } = useEventLog(state.tasks, state.external)
+  /** Plan del día: the strip above the list, kept until midnight. */
+  const [plan, setPlan] = usePlan(todayKey)
+  const steps = useMemo(() => planSteps(plan, state.tasks, todayKey), [plan, state.tasks, todayKey])
   /** Memoria (Alt+M) is open, starting from this task's pages. */
   const [memory, setMemory] = useState<{ startTask: string | null } | null>(null)
 
   // Latest values for handlers registered once.
-  const latest = useRef({ tasks: state.tasks, templates, focusId, todayKey, log })
+  const latest = useRef({ tasks: state.tasks, templates, focusId, todayKey, log, steps })
   useEffect(() => {
-    latest.current = { tasks: state.tasks, templates, focusId, todayKey, log }
-  }, [state.tasks, templates, focusId, todayKey, log])
+    latest.current = { tasks: state.tasks, templates, focusId, todayKey, log, steps }
+  }, [state.tasks, templates, focusId, todayKey, log, steps])
 
   const focusTask = focusId ? state.tasks.find((t) => t.id === focusId) : undefined
   const focused = useMemo(
@@ -244,7 +250,7 @@ export default function App() {
     },
     [ask, write],
   )
-  const planDay = useCallback((taskId: string | null) => openAi(taskId, PLAN_REQUEST, 'changes', 'Planificar el día'), [openAi])
+  const planDay = useCallback((taskId: string | null) => openAi(taskId, PLAN_REQUEST, 'plan', 'Planificar el día'), [openAi])
   const writeSummary = useCallback(
     (taskId: string | null) => openAi(taskId, SUMMARY_REQUEST, 'summary', 'Resumen del día'),
     [openAi],
@@ -353,6 +359,49 @@ export default function App() {
     return true
   }, [])
 
+  /**
+   * Takes the cursor to a task from the plan. A filter or a collapsed parent
+   * that hides it gives way, so the click always lands somewhere.
+   */
+  const openTask = useCallback(
+    (id: string) => {
+      if (view === 'board') {
+        const card = document.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(id)}"]`)
+        if (card) {
+          card.focus()
+          card.scrollIntoView({ block: 'nearest' })
+          return
+        }
+      }
+      const visible = view === 'list' && groups.some((g) => g.rows.some((r) => r.task.id === id && !r.dimmed))
+      if (!visible) {
+        const task = latest.current.tasks.find((t) => t.id === id)
+        meaningRun.current?.abort()
+        setMeaning('idle')
+        setPrefs((p) => ({
+          ...p,
+          view: 'list',
+          filters: { ...p.filters, tag: null, today: p.filters.today && task?.due != null && task.due <= todayKey, query: '', ids: null, hideDone: p.filters.hideDone && task?.status !== 'done' },
+        }))
+      }
+      requestAnimationFrame(() => dispatch({ type: 'reveal', id }))
+    },
+    [view, groups, todayKey, setPrefs, dispatch],
+  )
+  /** Alt+J: the cursor to «Ahora». */
+  const jumpToNow = useCallback(() => {
+    const now = latest.current.steps.find((s) => s.state === 'now')
+    if (now) openTask(now.task.id)
+    return Boolean(now)
+  }, [openTask])
+  const clearPlan = useCallback(() => {
+    const inside = document.activeElement?.closest('.plan')
+    setPlan(null)
+    notify('Plan del día quitado')
+    // The × goes away with the plan: the cursor lands back on the sheet.
+    if (inside) requestAnimationFrame(() => document.querySelector<HTMLElement>('textarea[data-task-text]')?.focus())
+  }, [setPlan, notify])
+
   const extraActions = useCallback(
     (taskId: string): QuickItem[] => {
       const task = state.tasks.find((t) => t.id === taskId)
@@ -396,6 +445,18 @@ export default function App() {
                 : []),
             ]
           : []),
+        ...(name
+          ? [{
+              label: plan?.ids.includes(taskId) ? 'Quitar del plan' : 'Añadir al plan',
+              keywords: 'plan dia día hoy paso workflow ahora orden prioridad',
+              run: () => {
+                const { plan: next, full } = togglePlanned(plan, taskId, state.tasks, todayKey)
+                if (full) notify(`El plan ya tiene ${MAX_STEPS} pasos`)
+                else setPlan(next)
+                dispatch({ type: 'focus', id: taskId })
+              },
+            }]
+          : []),
         { label: focusId === taskId ? 'Salir del foco' : 'Modo foco', hint: `${A}F`, keywords: 'foco focus concentrar', run: () => toggleFocusMode(taskId) },
         ...(name
           ? [{ label: 'Guardar como plantilla', keywords: 'plantilla template', run: () => {
@@ -426,7 +487,7 @@ export default function App() {
         { label: 'Importar copia', hint: `${M}O`, keywords: 'backup json abrir cargar restaurar', run: openImport },
       ]
     },
-    [state.tasks, templates, focusId, toggleFocusMode, saveTemplate, removeTemplate, notify, dispatch, copySummary, exportAll, openImport, ai.available, aiMode, aiHasKey, forgetKey, openAi, planDay, writeSummary, inbox.available, recoger, openSource, draftFor, meetingItems],
+    [state.tasks, templates, focusId, toggleFocusMode, saveTemplate, removeTemplate, notify, dispatch, copySummary, exportAll, openImport, ai.available, aiMode, aiHasKey, forgetKey, openAi, planDay, writeSummary, inbox.available, recoger, openSource, draftFor, meetingItems, plan, setPlan, todayKey],
   )
 
   const setView = useCallback((v: View) => setPrefs((p) => ({ ...p, view: v })), [setPrefs])
@@ -498,6 +559,8 @@ export default function App() {
       } else if (e.altKey && e.code === 'KeyP' && aiReady.current) {
         e.preventDefault()
         planDay(activeTaskId())
+      } else if (e.altKey && e.code === 'KeyJ') {
+        if (jumpToNow()) e.preventDefault()
       } else if (e.altKey && e.code === 'KeyI' && recogerReady.current) {
         e.preventDefault()
         void recoger()
@@ -523,7 +586,7 @@ export default function App() {
       window.removeEventListener('dragover', onDragOver)
       window.removeEventListener('drop', onDrop)
     }
-  }, [dispatch, setView, setPrefs, exportAll, openImport, importFile, toggleFocusMode, copySummary, planDay, writeSummary, recoger, openSource, draftFor])
+  }, [dispatch, setView, setPrefs, exportAll, openImport, importFile, toggleFocusMode, copySummary, planDay, writeSummary, recoger, openSource, draftFor, jumpToNow])
 
   // Keep the heading right when the tab stays open past midnight.
   useEffect(() => {
@@ -630,6 +693,7 @@ export default function App() {
               onShowSnoozed={() => setShowSnoozed(!showSnoozed)}
               onExitFocus={() => setFocusId(null)}
             />
+            <PlanStrip steps={steps} onPick={openTask} onClear={clearPlan} />
           </div>
 
           {view === 'list' ? (
@@ -672,6 +736,10 @@ export default function App() {
               ai.available
                 ? {
                     job: ai.job,
+                    preview:
+                      seed.mode === 'plan' && ai.job?.phase === 'proposal' ? (
+                        <PlanStrip steps={planSteps(planFromPicks(ai.job.picks, ai.job.next, todayKey), ai.job.next, todayKey)} />
+                      ) : null,
                     onAsk: (text) => {
                       const request = seed.request && text === seed.text ? seed.request : text
                       // What's typed after the «Borrador: …» label is the extra instruction, not the label itself.
@@ -706,6 +774,10 @@ export default function App() {
                           before.has(t.id) ? t : { ...t, due: t.due ?? inherit.due ?? null, tags: [...new Set([...t.tags, ...(inherit.tags ?? [])])] },
                         )
                         dispatch({ type: 'apply', tasks: next })
+                        if (seed.mode === 'plan') {
+                          const made = planFromPicks(job.picks, next, todayKey)
+                          if (made) setPlan(made)
+                        }
                         notify(`${job.summary} · ${isMac ? '⌘' : 'Ctrl+'}Z deshace`)
                       } else return
                       ai.cancel()

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import type { AiJob } from '../ai/useAi'
 import type { Change } from '../ai/ops'
 import { dictation, type Dictation } from '../ai/voice'
@@ -15,6 +15,8 @@ export interface AiControls {
   onCancel: () => void
   /** Key mode: the user's Anthropic key, typed once when the panel asks for it. */
   onKey: (key: string) => void
+  /** Shown instead of the list of changes for a proposal (Plan del día: the strip as it will look). */
+  preview?: ReactNode
 }
 
 interface Props {
@@ -194,6 +196,7 @@ export function QuickCapture({ onCapture, onClose, ai, initialText = '', pool }:
         {job && (
           <AiPanel
             job={job}
+            preview={ai?.preview}
             onAccept={acceptAnswer}
             onClose={close}
             onRetry={askAi}
@@ -211,13 +214,14 @@ export function QuickCapture({ onCapture, onClose, ai, initialText = '', pool }:
 
 interface PanelProps {
   job: AiJob
+  preview?: ReactNode
   onAccept: () => void
   onClose: () => void
   onRetry: () => void
   onKey: (key: string) => void
 }
 
-function AiPanel({ job, onAccept, onClose, onRetry, onKey }: PanelProps) {
+function AiPanel({ job, preview, onAccept, onClose, onRetry, onKey }: PanelProps) {
   const esc = (label: string) => (
     <button type="button" className="capture-act" onClick={onClose}>
       <kbd>esc</kbd> {label}
@@ -272,7 +276,7 @@ function AiPanel({ job, onAccept, onClose, onRetry, onKey }: PanelProps) {
   return (
     <div className="capture-panel" role="status" aria-live="polite">
       <span className="ai-summary">{job.summary}</span>
-      {job.changes.length > 0 && <Changes changes={job.changes} />}
+      {job.changes.length > 0 && (preview || <Changes changes={job.changes} />)}
       <span className="capture-foot">
         {job.changes.length > 0 && (
           <button type="button" className="capture-act" onClick={onAccept}>

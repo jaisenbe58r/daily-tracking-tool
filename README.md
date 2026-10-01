@@ -35,6 +35,8 @@ Al pulsar Enter (o salir de la línea), el texto se interpreta:
 
 **Buscar** (`Cmd/Ctrl+F`): filtra al escribir por texto, notas y tags, sin acentos y con las palabras en cualquier orden. Enter salta al primer resultado; `Esc` limpia la búsqueda.
 
+**Plan del día**: una tira encima de la lista con los pasos del día en orden, `1 → 2 → 3`, cada uno con su proyecto. «Ahora» es el primero sin cerrar (borde negro); los hechos llevan el check verde; el resto, «Después». Al completar una tarea (`Cmd/Ctrl+Enter`) «Ahora» avanza solo. Pulsar un paso lleva a su tarea; `Alt+J` lleva a «Ahora»; `×` o `Esc` sobre la tira quita el plan; `Alt+P` lo rehace con la IA. Sin IA: `/` → «Añadir al plan» / «Quitar del plan» (hasta 5 pasos). Se guarda en este navegador (`daily-tracking-tool:plan`) solo para hoy; lo borrado o pospuesto sale de la tira.
+
 **Modo foco** (`Alt+F` sobre una tarea): todo lo que no es esa tarea y sus subtareas se atenúa. Se sale con `Alt+F` otra vez o con la etiqueta «Foco» de arriba.
 
 **Día nuevo**: la primera vez que abres la hoja cada día, lo que quedó abierto de días anteriores sube arriba, y su fecha se cambia por la edad (`3 d`) para que se note lo que se arrastra.
@@ -62,7 +64,7 @@ La IA trabaja por detrás de lo que ya existe, sin ventana de chat. Propone y t�
 - **Volcado**: en `Cmd/Ctrl+K`, escribe o pega algo desordenado («el jueves demo Captia, antes revisar alarmas ZimVie y validar el torno 04») y pulsa `Cmd/Ctrl+Enter`. Sale un árbol con subtareas, tags y fechas. `Enter` sigue apuntando la línea tal cual, sin IA.
 - **Órdenes**: en la misma línea, «mueve lo de ZimVie a mañana y márcalo #urgente», «completa lo de Copilot». Si abres `Cmd/Ctrl+K` desde una tarea, «esta» es esa tarea.
 - **Dividir en pasos**: en `/`, «Dividir en pasos» propone de 3 a 6 subtareas. «Pedir a la IA…» abre la línea sobre esa tarea.
-- **Plan del día** (`Alt+P`, o en `/`): propone como mucho 3 tareas para hoy, con prioridad, entre lo vencido, lo arrastrado y lo que está en curso.
+- **Plan del día** (`Alt+P`, o en `/`): propone como mucho 3 tareas para hoy, con prioridad, entre lo vencido, lo arrastrado y lo que está en curso, en orden y con un porqué corto. La propuesta ya se ve como quedará la tira del plan; `Enter` la aplica.
 - **Resumen redactado** (`Alt+Shift+R`, o en `/`): el resumen del día en frases, para un chat o un correo. `Enter` lo copia. (`Alt+R` sigue copiando el Markdown literal, sin IA.)
 - **Buscar por significado**: en `Cmd/Ctrl+F`, si las palabras no encuentran nada, `Cmd/Ctrl+Enter` pide a la IA las tareas que encajan («lo de la máquina» → «Validar torno 04»). Escribir de nuevo vuelve a la búsqueda normal.
 
@@ -129,6 +131,8 @@ Sin ninguna de las tres, la app funciona igual.
 | `Cmd/Ctrl+K` | Captura global |
 | `Cmd/Ctrl+F` | Buscar |
 | `Alt+F` | Modo foco en la tarea actual |
+| `Alt+P` | Planificar el día con la IA (rehace el plan) |
+| `Alt+J` | Ir a la tarea «Ahora» del plan |
 | `Alt+R` | Copiar el resumen del día |
 | `Alt+M` | Abrir o cerrar la memoria |
 | `Cmd/Ctrl+S` · `Cmd/Ctrl+O` | Exportar · importar copia JSON |

@@ -20,6 +20,7 @@ export const proposalSchema = z.object({
       due: z.string().nullable().optional().describe('YYYY-MM-DD, o null para quitar la fecha'),
       priority: z.boolean().optional(),
       status: z.enum(['todo', 'doing', 'done']).optional(),
+      why: z.string().optional().describe('Solo al planificar el día: por qué esta tarea, en pocas palabras'),
     }),
   ),
 }) satisfies z.ZodType<Proposal>
