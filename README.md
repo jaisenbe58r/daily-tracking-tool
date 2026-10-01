@@ -45,6 +45,8 @@ Al pulsar Enter (o salir de la línea), el texto se interpreta:
 
 **Posponer** (`Alt+L` sobre una tarea, o `/` → «Posponer…»): elige un día (`Mañana`, `El lunes`…) o escríbelo (`viernes`, `15/10`, `3 días`, `2 semanas`). La tarea sale de la hoja y del Board, con sus subtareas, y ese día vuelve arriba con `↩ 3 d` (los días que estuvo fuera). No es lo mismo que planificar: la fecha dice para cuándo; posponer dice que no quieres verla hasta entonces. Arriba, «2 pospuestas» las enseña; `Alt+L` sobre una pospuesta la devuelve ya.
 
+**Subrayar** (`Alt+U`, `/` → «Subrayar», o escribiendo `==frase==`): pone un bloque verde Captia detrás de esas palabras, como «Se queda en la máquina.». Con texto seleccionado subraya eso; sin selección, toda la tarea; sobre un subrayado, lo quita. Úsalo poco: si todo está en verde, nada destaca.
+
 **Esperando** (`/` → «Esperando…»): para lo que depende de otra persona. Pospone la tarea (por defecto tres días laborables) y le pone `#esperando`. Si sigue abierta ese día, vuelve con `sin respuesta · 3 d` para que la persigas.
 
 **Hoy a cero**: junto a «Hoy», un número pequeño dice lo que queda para hoy. Al cerrar la última, un aviso verde lo celebra y recuerda `Alt+R`.
@@ -139,6 +141,7 @@ Sin ninguna de las tres, la app funciona igual.
 | `Cmd/Ctrl+Z` · `Cmd/Ctrl+Shift+Z` | Deshacer · rehacer (texto y estructura) |
 | `Alt+H` | Planificar para hoy (o quitarlo) |
 | `Alt+L` | Posponer (o devolver una pospuesta) |
+| `Alt+U` | Subrayar en verde lo seleccionado, o toda la tarea (o quitarlo) |
 | `Alt+T` | Vista Hoy |
 | `Alt+I` | Recoger tareas del correo y la agenda (dentro de claude.ai) |
 | `Alt+D` | Borrador del correo de la tarea (se copia, no se envía) |

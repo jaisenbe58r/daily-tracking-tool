@@ -44,6 +44,7 @@ function allKeys({ ai, inbox }: Pick<Props, 'ai' | 'inbox'>): [string, Key[]][] 
       [`${A}H`, 'para hoy'],
       [`${A}T`, 'vista Hoy'],
       [`${A}L`, 'posponer'],
+      [`${A}U`, 'subrayar (==frase==)'],
       [`${A}F`, 'modo foco'],
       [`${A}J`, 'ir a «Ahora» del plan'],
       [`${A}R`, 'copiar resumen'],
