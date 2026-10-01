@@ -173,7 +173,11 @@ export function QuickActions({ task, hasChildren, anchor, dispatch, extra, onClo
     : sub
     ? subItems
     : q
-      ? items.filter((i) => `${i.label} ${i.keywords ?? ''}`.toLowerCase().includes(q))
+      ? [
+          // What the label says comes before what only a keyword matches.
+          ...items.filter((i) => i.label.toLowerCase().includes(q)),
+          ...items.filter((i) => !i.label.toLowerCase().includes(q) && (i.keywords ?? '').toLowerCase().includes(q)),
+        ]
       : items.filter((i) => !i.searchOnly)
   const current = Math.min(active, Math.max(filtered.length - 1, 0))
 

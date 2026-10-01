@@ -33,9 +33,11 @@ Al pulsar Enter (o salir de la línea), el texto se interpreta:
 
 **Hoy** (`Alt+T`, o «Hoy» encima de la lista) muestra solo lo planificado para hoy o vencido, más lo que has cerrado hoy. `Alt+H` planifica o desplanifica la tarea actual para hoy.
 
-**Captura global** (`Cmd/Ctrl+K`): una línea flotante para apuntar algo sin perder el sitio. Enter la guarda (con la misma gramática) y el cursor vuelve a donde estabas; `Esc` la descarta.
+**Captura global** (`Cmd/Ctrl+K`): una línea flotante para apuntar algo sin perder el sitio. Enter la guarda (con la misma gramática) y el cursor vuelve a donde estabas; `Esc` la descarta. Al escribir `#` propone los tags que ya usas y con `@` las personas ya mencionadas y los días (`Tab` o `Enter` completa, `↑`/`↓` elige, `Esc` lo cierra).
 
 **Buscar** (`Cmd/Ctrl+F`): filtra al escribir por texto, notas y tags, sin acentos y con las palabras en cualquier orden. Enter salta al primer resultado; `Esc` limpia la búsqueda.
+
+**Plan del día**: una tira encima de la lista con los pasos del día en orden, `1 → 2 → 3`, cada uno con su proyecto. «Ahora» es el primero sin cerrar (borde negro); los hechos llevan el check verde; el resto, «Después». Al completar una tarea (`Cmd/Ctrl+Enter`) «Ahora» avanza solo. Pulsar un paso lleva a su tarea; `Alt+J` lleva a «Ahora»; `×` o `Esc` sobre la tira quita el plan; `Alt+P` lo rehace con la IA. Sin IA: `/` → «Añadir al plan» / «Quitar del plan» (hasta 5 pasos). Se guarda en este navegador (`daily-tracking-tool:plan`) solo para hoy; lo borrado o pospuesto sale de la tira.
 
 **Modo foco** (`Alt+F` sobre una tarea): todo lo que no es esa tarea y sus subtareas se atenúa. Se sale con `Alt+F` otra vez o con la etiqueta «Foco» de arriba.
 
@@ -47,11 +49,13 @@ Al pulsar Enter (o salir de la línea), el texto se interpreta:
 
 **Hoy a cero**: junto a «Hoy», un número pequeño dice lo que queda para hoy. Al cerrar la última, un aviso verde lo celebra y recuerda `Alt+R`.
 
+**Atajos abajo**: la barra del pie enseña los atajos de lo que estás haciendo (con varias tareas seleccionadas, los de la selección). «Todos», o `?` fuera del texto, abre la lista completa.
+
 **Los atajos se enseñan solos**: si haces con el ratón o desde `/` algo que tiene tecla, un aviso breve te la dice. Solo las tres primeras veces de cada acción.
 
 **Resumen del día** (`Alt+R`): copia al portapapeles un Markdown con lo hecho hoy (con su proyecto) y lo que está en curso, listo para pegar en un chat o un correo.
 
-**Memoria** (`Alt+M`, o `/` → «Abrir la memoria»): la hoja compilada en páginas enlazadas, al estilo del LLM Wiki de Karpathy. Cada tarea con dos o más subtareas es un **proyecto**, cada `#tema` y cada `@persona` escrita en una tarea (`Llamar a @luis`) tiene su página, y cada día una entrada de **diario**. En cada página, la **Trama** cruza lo relacionado con las semanas: una fila lleva a esa página, una celda al día. El **Panorama** resume cómo trabajas en cinco gráficos (Pulso, Estratos, Vuelo, Deriva y Balance). `/` busca, `←`/`→` pasan de día, `Alt+←` vuelve por el recorrido, `Esc` regresa al folio y pulsar una tarea te lleva a ella. Nada se escribe en la memoria: se recalcula de la hoja y de un historial de cambios que la app guarda sola en el navegador (IndexedDB) y que va dentro de la copia JSON.
+**Memoria** (`Alt+M`, o `/` → «Abrir la memoria»): la hoja compilada en páginas enlazadas, al estilo del LLM Wiki de Karpathy. Cada tarea con dos o más subtareas es un **proyecto**, cada `#tema` y cada `@persona` escrita en una tarea (`Llamar a @luis`) tiene su página, y cada día una entrada de **diario**. En cada página, la **Trama** cruza lo relacionado con las semanas: una fila lleva a esa página, una celda al día. La **Trama** de toda la hoja tiene su entrada en el índice, debajo de Panorama. El **Panorama** resume cómo trabajas en cinco gráficos (Pulso, Estratos, Vuelo, Deriva y Balance). `/` busca, `←`/`→` pasan de día, `Alt+←` vuelve por el recorrido, `Esc` regresa al folio y pulsar una tarea te lleva a ella. Nada se escribe en la memoria: se recalcula de la hoja y de un historial de cambios que la app guarda sola en el navegador (IndexedDB) y que va dentro de la copia JSON.
 
 **Plantillas**: en `/`, «Guardar como plantilla» guarda la tarea con sus subtareas; luego «Plantilla · nombre» la inserta (sin estados ni fechas). Para borrar una, escribe «borrar» en el menú. Las plantillas viajan en la copia JSON.
 
@@ -64,7 +68,7 @@ La IA trabaja por detrás de lo que ya existe, sin ventana de chat. Propone y t�
 - **Volcado**: en `Cmd/Ctrl+K`, escribe o pega algo desordenado («el jueves demo Captia, antes revisar alarmas ZimVie y validar el torno 04») y pulsa `Cmd/Ctrl+Enter`. Sale un árbol con subtareas, tags y fechas. `Enter` sigue apuntando la línea tal cual, sin IA.
 - **Órdenes**: en la misma línea, «mueve lo de ZimVie a mañana y márcalo #urgente», «completa lo de Copilot». Si abres `Cmd/Ctrl+K` desde una tarea, «esta» es esa tarea.
 - **Dividir en pasos**: en `/`, «Dividir en pasos» propone de 3 a 6 subtareas. «Pedir a la IA…» abre la línea sobre esa tarea.
-- **Plan del día** (`Alt+P`, o en `/`): propone como mucho 3 tareas para hoy, con prioridad, entre lo vencido, lo arrastrado y lo que está en curso.
+- **Plan del día** (`Alt+P`, o en `/`): propone como mucho 3 tareas para hoy, con prioridad, entre lo vencido, lo arrastrado y lo que está en curso, en orden y con un porqué corto. La propuesta ya se ve como quedará la tira del plan; `Enter` la aplica.
 - **Resumen redactado** (`Alt+Shift+R`, o en `/`): el resumen del día en frases, para un chat o un correo. `Enter` lo copia. (`Alt+R` sigue copiando el Markdown literal, sin IA.)
 - **Buscar por significado**: en `Cmd/Ctrl+F`, si las palabras no encuentran nada, `Cmd/Ctrl+Enter` pide a la IA las tareas que encajan («lo de la máquina» → «Validar torno 04»). Escribir de nuevo vuelve a la búsqueda normal.
 
@@ -72,7 +76,7 @@ Las propuestas se van dibujando mientras llegan. En pantallas táctiles, «IA»,
 
 **Dictado**: donde el navegador lo permite (Chrome, Edge, Safari), la línea de `Cmd/Ctrl+K` tiene un micrófono (`Alt+V`). Usa el reconocimiento de voz del propio navegador, no la IA, y funciona aunque no haya clave.
 
-**Recoger del correo y la agenda** (`Alt+I`, o `/` → Recoger): dentro de claude.ai, la app lee tu Gmail y tu Google Calendar con tus propios conectores de claude.ai y propone como tareas todo lo que te toca de forma clara, sin límite: correos que te escriben a ti (no en copia) y aún no has contestado, hilos destacados, correos tuyos de hace 2 a 10 días que siguen sin respuesta y reuniones de la próxima semana con la invitación sin responder. Se ven como cualquier otra propuesta: `Enter` las añade, `Esc` las descarta, `Cmd/Ctrl+Z` deshace. Cada tarea guarda en la nota el enlace a su correo o evento; `Alt+O` lo abre. Al abrir la página y cada 15 minutos mientras está a la vista, la app vuelve a mirar y la cabecera avisa («3 tareas en tu correo»); no se añade nada hasta que lo abres. Lo que ya viste no vuelve a proponerse, salvo que el hilo reciba una respuesta nueva. Solo lectura: la app no puede enviar, borrar ni responder invitaciones.
+**Recoger del correo y la agenda** (`Alt+I`, o `/` → Recoger): dentro de claude.ai, la app lee tu Gmail y tu Google Calendar con tus propios conectores de claude.ai y propone como tareas todo lo que te toca de forma clara, sin límite: correos que te escriben a ti (no en copia) y aún no has contestado, hilos destacados, correos tuyos de hace 2 a 10 días que siguen sin respuesta y reuniones de la próxima semana con la invitación sin responder. Se ven como cualquier otra propuesta: `Enter` las añade, `Esc` las descarta, `Cmd/Ctrl+Z` deshace. Cada tarea guarda en la nota el enlace a su correo o evento; `Alt+O` lo abre. Al abrir la página y cada 15 minutos mientras está a la vista, la app vuelve a mirar y la cabecera avisa («3 tareas en tu correo»); no se añade nada hasta que lo abres. Lo que ya viste no vuelve a proponerse, salvo que el hilo reciba una respuesta nueva. Recoger solo lee: la app no puede enviar, borrar ni responder invitaciones (solo escribe borradores de Gmail y reuniones nuevas, cuando tú lo pides; ver abajo).
 
 **Granola**: si tienes conectado Granola en claude.ai, Recoger lee también tus notas de reuniones de las dos últimas semanas y propone lo que la nota dice que te toca a ti (acciones asignadas a ti o compromisos tuyos), nada asignado a otros. Con garantías:
 - Cada tarea trae la cita literal de la nota donde se dice. La app comprueba que esas palabras están de verdad en la nota; si no, la tarea no se propone y el aviso lo dice («1 sin cita en la nota, descartada»). La cita se ve al pasar por encima de «Granola ↗», que abre la nota (`Alt+O`).
@@ -82,11 +86,18 @@ Las propuestas se van dibujando mientras llegan. En pantallas táctiles, «IA»,
 
 **Cerrar el bucle**: las tareas que esperan una respuesta (con `#esperando` o las que Recoger sacó de un correo tuyo sin contestar) se vigilan en esa misma pasada. Cuando llega la respuesta, la cabecera lo dice («1 respuesta en tu correo») y Recoger propone marcar la tarea como hecha y, si la respuesta pide algo, añadir el siguiente paso.
 
-**Borrador listo** (`Alt+D`, o `/` → «Preparar borrador»): para una tarea que consiste en escribir a alguien, la app redacta el correo con tu tono a partir del hilo del que salió (o un recordatorio amable si estás esperando). Dentro de claude.ai las tareas que vienen de un correo ya lo traen preparado, y la fila lo marca con un ✎ discreto. `Enter` lo copia; `Alt+O` abre el correo para pegarlo. Escribe en la línea para pedir otra versión («más corto»). Nunca se envía nada desde la app.
+**Borrador listo** (`Alt+D`, o `/` → «Preparar borrador»): para una tarea que consiste en escribir a alguien, la app redacta el correo con tu tono a partir del hilo del que salió (o un recordatorio amable si estás esperando). Dentro de claude.ai las tareas que vienen de un correo ya lo traen preparado, y la fila lo marca con un ✎ discreto. `Enter` lo copia; `Alt+O` abre el correo para pegarlo. Escribe en la línea y `Cmd/Ctrl+Enter` para pedir otra versión («más corto»).
 
-**Preparar reunión** (`/` → «Preparar reunión…»): elige una reunión de hoy o mañana y la app propone una nota corta (de qué va, qué se habló la última vez con esas personas, qué les debes) y hasta cuatro subtareas, en la tarea de la reunión o en una nueva. Con Granola conectado, también lee tus notas de las últimas reuniones (hasta 3, de los dos últimos meses) con alguno de los asistentes.
+- **Tu estilo**: dentro de claude.ai, la app lee tus 5 últimos correos enviados y saca tu firma (las líneas con las que acaban, tal cual) y unos ejemplos cortos de saludo, tono y longitud. El borrador los imita y acaba con tu firma, una sola vez. Se guarda en el navegador (`daily-tracking-tool:estilo`) y se relee una vez por semana.
+- **A Gmail** (`Alt+G`, o «Gmail» bajo el borrador): lo guarda como borrador en tu Gmail y lo abre en otra pestaña. Si la tarea salió de un correo, es la respuesta en ese hilo (a quien escribió el último, el resto en copia); si no, un correo nuevo a las direcciones escritas en la tarea. Con el borrador ya hecho, `Alt+G` (también sobre la fila) lo vuelve a abrir. Pedir otra versión hace uno nuevo.
 
-Al modelo solo le llega tu petición y una lista compacta de las tareas (texto, estado, tags, fecha). Con Recoger, además, el último mensaje (recortado, sin el historial citado) de los hilos que pasan los filtros, el título de las invitaciones pendientes y el resumen y tus notas de las reuniones de Granola aún no leídas (sin la transcripción). Con Borrador listo y Preparar reunión, el hilo de esa tarea o los correos y notas recientes con los asistentes. En segundo plano solo corren Recoger y, dentro de claude.ai, los borradores de hasta 6 tareas de correo por visita.
+Nunca se envía nada desde la app: el borrador se manda (o no) desde Gmail. Fuera de claude.ai no hay «Gmail» ni estilo leído del correo: `Enter` copia, como siempre.
+
+**Preparar reunión** (`/` → «Preparar reunión…»): elige una reunión de hoy o mañana y la app propone una nota corta (de qué va, qué se habló la última vez con esas personas, qué les debes) y hasta cuatro subtareas, en la tarea de la reunión o en una nueva. Con Granola conectado, también lee tus notas de las últimas reuniones (hasta 3, de los dos últimos meses) con alguno de los asistentes. Preparar una reunión que ya existe no toca Calendar.
+
+**Nueva reunión** (primera opción de esa lista): la reunión que pide la tarea, como propuesta. Título y agenda corta, de la tarea, su nota y su correo; 30 minutos en el primer hueco libre de tu agenda en los dos próximos días laborables, de 9:00 a 18:00; invitados, las direcciones de la tarea y de su correo, y las `@personas` que coinciden con una de ellas (las que no, van en la descripción, sin invitar). `Enter` la crea en Google Calendar con enlace de Meet, y Google envía la invitación («Reunión creada en Calendar · invitación enviada a 2»). La tarea pasa a apuntar al evento (`Alt+O`) y toma su fecha; el enlace al correo, si lo tenía, queda en la nota. `Esc` la descarta. Para moverla, escribe en la línea y `Cmd/Ctrl+Enter`: «el jueves a las 10», «mañana 16:30», «1 hora», «45 min» (los días, con la gramática de siempre).
+
+Al modelo solo le llega tu petición y una lista compacta de las tareas (texto, estado, tags, fecha). Con Recoger, además, el último mensaje (recortado, sin el historial citado) de los hilos que pasan los filtros, el título de las invitaciones pendientes y el resumen y tus notas de las reuniones de Granola aún no leídas (sin la transcripción). Con Borrador listo y Preparar reunión, el hilo de esa tarea o los correos y notas recientes con los asistentes; con Borrador listo, también tu firma y hasta 3 de tus correos enviados, recortados a unas líneas. Tu agenda no le llega: el hueco de Nueva reunión se calcula en el navegador. En segundo plano solo corren Recoger y, dentro de claude.ai, los borradores de hasta 6 tareas de correo por visita.
 
 **Cómo se activa**: la app elige sola la primera vía que funcione.
 
@@ -98,7 +109,7 @@ Al modelo solo le llega tu petición y una lista compacta de las tareas (texto, 
    ```
 
    `AI_MODEL` cambia el modelo (por defecto `anthropic/claude-haiku-4-5`; también vale `openai/...` o `google/...` con su clave).
-2. **Dentro de claude.ai** (la vista previa publicada como artifact): usa Claude con tu propia cuenta. No hace falta clave; claude.ai te pide permiso la primera vez. Para Recoger, el artifact se publica con las capacidades `sample`, `mcp`, `db` y `user` (conectores `Gmail`: `search_threads`, `get_thread`; `Google Calendar`: `list_events`; `Granola`: `list_meetings`, `get_meetings`), y claude.ai pide permiso una vez por conector.
+2. **Dentro de claude.ai** (la vista previa publicada como artifact): usa Claude con tu propia cuenta. No hace falta clave; claude.ai te pide permiso la primera vez. Para Recoger, Borrador listo y Nueva reunión, el artifact se publica con las capacidades `sample`, `mcp`, `db` y `user` (conectores `Gmail`: `search_threads`, `get_thread`, `create_draft`; `Google Calendar`: `list_events`, `create_event`; `Granola`: `list_meetings`, `get_meetings`), y claude.ai pide permiso una vez por conector. Sin `create_draft` o `create_event`, «Gmail» y «Nueva reunión» dicen que falta el permiso y lo demás sigue igual.
 3. **Clave en el navegador** (una copia local o en un hosting estático, sin servidor): la primera vez que pides algo a la IA, la línea te pide tu clave de Anthropic. Se guarda solo en ese navegador (`localStorage`) y el navegador llama directamente a Anthropic. En `/`, «Olvidar la clave de la IA» la borra. `VITE_AI_MODEL` cambia el modelo (por defecto `claude-haiku-4-5`).
 
 Sin ninguna de las tres, la app funciona igual.
@@ -116,21 +127,28 @@ Sin ninguna de las tres, la app funciona igual.
 | `Cmd/Ctrl+Enter` | Completar o reabrir |
 | `Shift+Enter` | Nota de la tarea (`Esc` vuelve al texto) |
 | `#tag` | Escribir `#algo` en el texto lo convierte en tag al pulsar Enter o salir |
-| `/` | Acciones rápidas (en curso, subtarea, colapsar, mover, eliminar…) |
+| `/` | Acciones rápidas (en curso, subtarea, colapsar, mover, eliminar…): al principio de la línea, tras un espacio o al final (salvo tras un número, para `3/10`); sin línea activa, sobre la última tarea |
+| `Cmd/Ctrl+/` | Acciones rápidas desde cualquier punto del texto |
 | `↑` / `↓` | Moverse entre tareas |
 | `Alt+Shift+↑/↓` | Mover la tarea entre sus hermanas |
 | `Cmd/Ctrl+.` | Colapsar / expandir hijos |
 | `Backspace` en una tarea vacía | Borrarla |
+| `Cmd/Ctrl+Shift+Backspace` | Borrar la tarea (también la `×` al pasar por encima) |
+| `Shift+↑/↓` al borde del texto · `Shift+clic` · `Cmd/Ctrl+clic` | Seleccionar varias tareas: `Backspace` las borra, `Cmd/Ctrl+Enter` las completa, `Esc` sale. `Cmd/Ctrl+A` dos veces las selecciona todas |
+| `?` | Todos los atajos (o «Todos» en la barra de abajo) |
 | `Cmd/Ctrl+Z` · `Cmd/Ctrl+Shift+Z` | Deshacer · rehacer (texto y estructura) |
 | `Alt+H` | Planificar para hoy (o quitarlo) |
 | `Alt+L` | Posponer (o devolver una pospuesta) |
 | `Alt+T` | Vista Hoy |
 | `Alt+I` | Recoger tareas del correo y la agenda (dentro de claude.ai) |
 | `Alt+D` | Borrador del correo de la tarea (se copia, no se envía) |
+| `Alt+G` | Guardar el borrador en Gmail y abrirlo (o abrir el ya hecho; dentro de claude.ai) |
 | `Alt+O` | Abrir el correo o evento del que salió la tarea |
 | `Cmd/Ctrl+K` | Captura global |
 | `Cmd/Ctrl+F` | Buscar |
 | `Alt+F` | Modo foco en la tarea actual |
+| `Alt+P` | Planificar el día con la IA (rehace el plan) |
+| `Alt+J` | Ir a la tarea «Ahora» del plan |
 | `Alt+R` | Copiar el resumen del día |
 | `Alt+M` | Abrir o cerrar la memoria |
 | `Cmd/Ctrl+S` · `Cmd/Ctrl+O` | Exportar · importar copia JSON |

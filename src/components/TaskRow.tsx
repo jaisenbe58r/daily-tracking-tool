@@ -26,6 +26,10 @@ interface Props {
   activeTag: string | null
   faded: boolean
   onTagClick: (tag: string) => void
+  /** Part of a row selection (Shift+↑/↓, Shift+click). */
+  selected: boolean
+  /** Shift+↑/↓ past the text's edge (or Ctrl+A twice): start selecting rows. */
+  onSelectRows: (id: string, dir: -1 | 1 | 'all') => void
 }
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
@@ -47,7 +51,7 @@ function isSingleLine(el: HTMLTextAreaElement) {
   return el.scrollHeight <= parseFloat(getComputedStyle(el).lineHeight) * 1.5
 }
 
-function TaskRowImpl({ row, focus, dragging, dispatch, onOpenActions, onDragStart, structural, inherit, activeTag, onTagClick, faded }: Props) {
+function TaskRowImpl({ row, focus, dragging, dispatch, onOpenActions, onDragStart, structural, inherit, activeTag, onTagClick, faded, selected, onSelectRows }: Props) {
   const today = useToday()
   const { teach } = useNotice()
   const drafted = useHasDraft(row.task.id)
@@ -100,7 +104,26 @@ function TaskRowImpl({ row, focus, dragging, dispatch, onOpenActions, onDragStar
     const caret = el.selectionStart
     const collapsedSel = el.selectionStart === el.selectionEnd
 
-    if (e.key === 'Enter' && mod(e)) {
+    const len = el.value.length
+    const whole = el.selectionStart === 0 && el.selectionEnd === len
+    if (e.key === '/' && mod(e)) {
+      // Ctrl+/ opens the menu wherever the caret is.
+      e.preventDefault()
+      onOpenActions(task.id, el)
+    } else if (e.key === 'Backspace' && mod(e) && e.shiftKey) {
+      e.preventDefault()
+      dispatch({ type: 'remove', id: task.id })
+    } else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && e.shiftKey && !e.altKey && !mod(e)
+      && (e.key === 'ArrowUp' ? el.selectionStart === 0 && (collapsedSel || whole) : el.selectionEnd === len && (collapsedSel || whole))) {
+      e.preventDefault()
+      dispatch({ type: 'commit', id: task.id })
+      onSelectRows(task.id, e.key === 'ArrowUp' ? -1 : 1)
+    } else if (e.key.toLowerCase() === 'a' && mod(e) && !e.shiftKey && (whole || !len)) {
+      // Ctrl+A twice: the text, then every row.
+      e.preventDefault()
+      dispatch({ type: 'commit', id: task.id })
+      onSelectRows(task.id, 'all')
+    } else if (e.key === 'Enter' && mod(e)) {
       e.preventDefault()
       dispatch({ type: 'toggle-done', id: task.id })
     } else if (e.key === 'Enter' && e.shiftKey) {
@@ -133,7 +156,8 @@ function TaskRowImpl({ row, focus, dragging, dispatch, onOpenActions, onDragStar
     } else if (e.key === 'Backspace' && !task.text && collapsedSel) {
       e.preventDefault()
       dispatch({ type: 'remove', id: task.id })
-    } else if (e.key === '/' && collapsedSel && (caret === 0 || /\s/.test(el.value[caret - 1]))) {
+    } else if (e.key === '/' && collapsedSel && (caret === 0 || /\s/.test(el.value[caret - 1]) || (caret === len && !/\d/.test(el.value[caret - 1])))) {
+      // At the start, after a space, or at the end of the line (but "3/" stays a date being typed).
       e.preventDefault()
       onOpenActions(task.id, el)
     } else if (e.altKey && e.code === 'KeyH') {
@@ -183,6 +207,7 @@ function TaskRowImpl({ row, focus, dragging, dispatch, onOpenActions, onDragStar
       data-dragging={dragging || undefined}
       data-dimmed={dimmed || undefined}
       data-faded={faded || undefined}
+      data-selected={selected || undefined}
       style={{ '--depth': depth } as React.CSSProperties}
     >
       {structural && (
@@ -330,6 +355,20 @@ function TaskRowImpl({ row, focus, dragging, dispatch, onOpenActions, onDragStar
           >
             {stale ? `${ageInDays(task, today)} d` : dateFmt.format(task.createdAt).replace('.', '')}
           </time>
+          <button
+            className="del"
+            tabIndex={-1}
+            aria-label="Borrar"
+            title={`Borrar (${M}⇧⌫)`}
+            onClick={(e) => {
+              dispatch({ type: 'remove', id: task.id })
+              if (byPointer(e)) teach('delete', `${M}⇧⌫`)
+            }}
+          >
+            <svg width="9" height="9" viewBox="0 0 9 9" aria-hidden>
+              <path d="M1.5 1.5l6 6M7.5 1.5l-6 6" fill="none" stroke="currentColor" strokeWidth="1.2" />
+            </svg>
+          </button>
         </div>
         {showNotes && (
           <textarea

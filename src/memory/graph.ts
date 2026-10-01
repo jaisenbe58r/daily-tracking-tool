@@ -162,6 +162,7 @@ export const personName = (h: string) => capital(h)
 
 export function pageName(mem: Memory, key: PageKey): string {
   if (key === 'panorama') return 'Panorama'
+  if (key === 'trama') return 'Trama'
   const [kind, id] = [key.slice(0, 1), key.slice(2)]
   if (kind === 'p') return mem.byId.get(id)?.text.trim() ?? 'Proyecto'
   if (kind === 'h') return personName(id)
@@ -204,6 +205,21 @@ export function trama(mem: Memory, key: PageKey): TramaRow[] {
   const rows: TramaRow[] = [{ key, label: 'Todo', tasks: own, counts: [] }]
   for (const [k] of related(mem, key)) rows.push({ key: k, label: pageName(mem, k), tasks: own.filter((t) => mem.keys.get(t.id)?.includes(k)), counts: [] })
   for (const r of rows) r.counts = perWeek(mem, r.tasks)
+  return rows
+}
+
+/** The whole sheet's Trama: everything, then the busiest projects, people and topics. */
+export function tramaAll(mem: Memory, limit = 12): TramaRow[] {
+  const rows: TramaRow[] = [{ key: 'panorama', label: 'Todo', tasks: mem.work, counts: [] }]
+  const pages = [...mem.projects.map((p) => `p:${p.id}`), ...mem.people.map((h) => `h:${h}`), ...mem.tags.map((g) => `t:${g}`)]
+  const busy = pages
+    .map((k) => ({ k, tasks: mem.index.get(k) ?? [] }))
+    .map((r) => ({ ...r, counts: perWeek(mem, r.tasks) }))
+    .filter((r) => r.counts.some(Boolean))
+    .sort((a, b) => b.counts.reduce((x, y) => x + y, 0) - a.counts.reduce((x, y) => x + y, 0) || a.k.localeCompare(b.k))
+    .slice(0, limit)
+  for (const r of busy) rows.push({ key: r.k, label: r.k.startsWith('h:') ? `@${pageName(mem, r.k)}` : pageName(mem, r.k), tasks: r.tasks, counts: r.counts })
+  rows[0].counts = perWeek(mem, rows[0].tasks)
   return rows
 }
 

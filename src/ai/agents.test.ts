@@ -123,3 +123,12 @@ describe('Preparar reunión', () => {
     expect(meetingTask(tasks, visit)?.id).toBe('r')
   })
 })
+
+describe('subjectFrom', () => {
+  it('drops the addresses, tags and the verb', async () => {
+    const { subjectFrom } = await import('./drafts')
+    expect(subjectFrom('Responder a marta@captiatechnology.com sobre la demo Captia #captia')).toBe('La demo Captia')
+    expect(subjectFrom('Oferta torno 04 para @luis !')).toBe('Oferta torno 04 para luis')
+    expect(subjectFrom('Escribir a ana@x.com')).toBe('Escribir a')
+  })
+})

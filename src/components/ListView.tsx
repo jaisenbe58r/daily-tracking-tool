@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import type { Action, AppState } from '../lib/store'
 import { childrenOf, descendantIds, flatten, nextSibling } from '../lib/tree'
 import type { Group, Row } from '../lib/types'
@@ -30,16 +30,137 @@ interface Props {
   extraActions: (taskId: string) => QuickItem[]
   /** Focus mode: every task outside this set is faded. */
   focused: Set<string> | null
+  /** How many rows are selected, for the shortcut bar. */
+  onSelection?: (count: number) => void
 }
 
-export function ListView({ state, dispatch, groups, structural, grouped, activeTag, onTagClick, extraActions, focused }: Props) {
+const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
+const isEditable = (el: Element | null) => !!el && (el.matches('input, textarea, select, [contenteditable="true"]') || !!el.closest('.qa, .capture, .search, dialog'))
+
+/** A row selection: from `anchor` to `head` in the visible order, plus rows added with Ctrl/Cmd+click. */
+interface Selection {
+  anchor: string
+  head: string
+  ids: Set<string>
+}
+
+export function ListView({ state, dispatch, groups, structural, grouped, activeTag, onTagClick, extraActions, focused, onSelection }: Props) {
   const listRef = useRef<HTMLDivElement>(null)
   const [actionsFor, setActionsFor] = useState<{ id: string; anchor: DOMRect; sub: SubMenu | null } | null>(null)
   const [drag, setDrag] = useState<Drag | null>(null)
 
   const openActions = useCallback((id: string, anchor: HTMLElement, sub: SubMenu | null = null) => {
     setActionsFor({ id, anchor: anchor.getBoundingClientRect(), sub })
+  }, [setActionsFor])
+
+  const rows = groups.flatMap((g) => g.rows)
+  const order = rows.map((r) => r.task.id)
+  const orderRef = useRef(order)
+  useLayoutEffect(() => {
+    orderRef.current = order
+  })
+
+  const [rawSel, setSel] = useState<Selection | null>(null)
+  // Rows that disappear (deleted, filtered out) leave the selection.
+  const kept = rawSel ? [...rawSel.ids].filter((id) => order.includes(id)) : []
+  const sel = rawSel && kept.length ? { ...rawSel, ids: new Set(kept) } : null
+  const range = (anchor: string, head: string) => {
+    const ids = orderRef.current
+    const [a, b] = [ids.indexOf(anchor), ids.indexOf(head)].sort((x, y) => x - y)
+    return new Set(a < 0 ? [head] : ids.slice(a, b + 1))
+  }
+  const takeKeys = () => {
+    ;(document.activeElement as HTMLElement | null)?.blur()
+    listRef.current?.focus({ preventScroll: true })
+  }
+  const clearSel = (focusId?: string) => {
+    setSel(null)
+    if (focusId) dispatch({ type: 'focus', id: focusId })
+  }
+
+  const selectRows = useCallback((id: string, dir: -1 | 1 | 'all') => {
+    const ids = orderRef.current
+    let next: Selection
+    if (dir === 'all') {
+      next = { anchor: ids[0], head: ids.at(-1)!, ids: new Set(ids) }
+    } else {
+      const head = ids[ids.indexOf(id) + dir] ?? id
+      const [a, b] = [ids.indexOf(id), ids.indexOf(head)].sort((x, y) => x - y)
+      next = { anchor: id, head, ids: new Set(ids.slice(a, b + 1)) }
+    }
+    setSel(next)
+    ;(document.activeElement as HTMLElement | null)?.blur()
+    listRef.current?.focus({ preventScroll: true })
   }, [])
+
+  const selCount = sel?.ids.size ?? 0
+  useEffect(() => onSelection?.(selCount), [selCount, onSelection])
+
+  const onSelKey = (e: ReactKeyboardEvent) => {
+    if (!sel) return
+    const mod = isMac ? e.metaKey : e.ctrlKey
+    const ids = [...sel.ids]
+    if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && e.shiftKey) {
+      e.preventDefault()
+      const head = order[order.indexOf(sel.head) + (e.key === 'ArrowUp' ? -1 : 1)] ?? sel.head
+      setSel({ ...sel, head, ids: range(sel.anchor, head) })
+    } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      e.preventDefault()
+      clearSel(sel.head)
+    } else if (e.key === 'Backspace' || e.key === 'Delete') {
+      e.preventDefault()
+      setSel(null)
+      dispatch({ type: 'remove-many', ids })
+    } else if (e.key === 'Enter' && mod) {
+      e.preventDefault()
+      dispatch({ type: 'done-many', ids })
+    } else if (e.key === 'Escape' || e.key === 'Enter') {
+      e.preventDefault()
+      clearSel(sel.head)
+    } else if (e.key.toLowerCase() === 'a' && mod) {
+      e.preventDefault()
+      setSel({ anchor: order[0], head: order.at(-1)!, ids: new Set(order) })
+    }
+  }
+
+  // Shift+click extends from the row being edited (or the selection); Ctrl/Cmd+click adds or removes one row.
+  const onListPointerDown = (e: ReactPointerEvent) => {
+    const id = (e.target as Element).closest<HTMLElement>('[data-row-id]')?.dataset.rowId
+    const mod = isMac ? e.metaKey : e.ctrlKey
+    if (!id || (!e.shiftKey && !mod)) {
+      if (sel) setSel(null)
+      return
+    }
+    const from = sel?.anchor ?? (document.activeElement as HTMLElement | null)?.closest<HTMLElement>('[data-row-id]')?.dataset.rowId ?? state.focus?.id
+    if (!from && !mod) return
+    e.preventDefault()
+    if (mod) {
+      const ids = new Set(sel?.ids ?? (state.focus ? [state.focus.id] : []))
+      if (ids.has(id)) ids.delete(id)
+      else ids.add(id)
+      setSel(ids.size ? { anchor: id, head: id, ids } : null)
+    } else {
+      setSel({ anchor: from!, head: id, ids: range(from!, id) })
+    }
+    takeKeys()
+  }
+
+  // "/" with no line being edited opens the menu on the last task you were on (or the first).
+  const focusId = state.focus?.id
+  const selHead = sel?.head
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== '/' || e.altKey || isEditable(document.activeElement) || actionsFor) return
+      const id = selHead ?? (focusId && orderRef.current.includes(focusId) ? focusId : orderRef.current[0])
+      const el = id && document.querySelector<HTMLElement>(`[data-task-text="${id}"]`)
+      if (!el) return
+      e.preventDefault()
+      setSel(null)
+      openActions(id, el)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [focusId, selHead, actionsFor, openActions])
 
   // Pointer-driven tree drag & drop: vertical position picks the gap between
   // rows, horizontal offset picks the nesting depth (clamped to what's valid).
@@ -118,13 +239,21 @@ export function ListView({ state, dispatch, groups, structural, grouped, activeT
     else dispatch({ type: 'add-end', inherit: groups.length === 1 ? groups[0].inherit : {} })
   }
 
-  const rows = groups.flatMap((g) => g.rows)
   const actionsRow = actionsFor && rows.find((r) => r.task.id === actionsFor.id)
   const empty = rows.length === 0
 
   return (
     <>
-      <div className="list" ref={listRef} data-dragging={drag ? true : undefined}>
+      <div
+        className="list"
+        ref={listRef}
+        tabIndex={-1}
+        data-dragging={drag ? true : undefined}
+        onPointerDownCapture={onListPointerDown}
+        onKeyDown={onSelKey}
+        onBlur={(e) => { if (rawSel && !e.currentTarget.contains(e.relatedTarget as Node | null)) setSel(null) }}
+        aria-multiselectable
+      >
         {groups.map((group) => (
           <section key={group.key} className="group">
             {grouped && (
@@ -147,6 +276,8 @@ export function ListView({ state, dispatch, groups, structural, grouped, activeT
                 inherit={group.inherit}
                 activeTag={activeTag}
                 onTagClick={onTagClick}
+                selected={!!sel?.ids.has(row.task.id)}
+                onSelectRows={selectRows}
               />
             ))}
           </section>
