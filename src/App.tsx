@@ -22,6 +22,7 @@ import type { Meeting } from './ai/meeting'
 import { hideSnoozed, snoozedCount } from './lib/snooze'
 import { NoticeContext, useNoticeValue } from './lib/teach'
 import { useEventLog } from './memory/log'
+import { useCloudSync, type Sheet } from './lib/cloud'
 
 // The memory is its own view: loaded the first time it opens, so the sheet stays light.
 const MemoryView = lazy(() => import('./memory/MemoryView'))
@@ -114,6 +115,15 @@ export default function App() {
 
   const notify = useCallback((text: string) => setToast({ text, id: Date.now() }), [])
   const notice = useNoticeValue(notify)
+  // Inside claude.ai the sheet also lives in the artifact's own store: the same tasks on every device.
+  const fromCloud = useCallback(
+    (sheet: Sheet) => {
+      dispatch({ type: 'replace', tasks: sheet.tasks })
+      replaceTemplates(sheet.templates)
+    },
+    [dispatch, replaceTemplates],
+  )
+  useCloudSync({ tasks: state.tasks, templates, replace: fromCloud, notify })
   const { teach } = notice
   useEffect(() => {
     if (!toast) return
