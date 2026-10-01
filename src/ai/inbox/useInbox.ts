@@ -11,7 +11,7 @@ const EVERY_MS = 15 * 60_000
 /** A manual «Recoger» reuses a check this fresh instead of reading everything again. */
 const FRESH_MS = 2 * 60_000
 
-export type Taken = { found: Found } | { none: true; problem?: string }
+export type Taken = { found: Found } | { none: true; problem?: string; scan?: string }
 
 /**
  * «Recoger»: tasks hiding in the user's mail, calendar and meeting notes. Runs by itself when
@@ -24,6 +24,8 @@ export function useInbox(mode: AiMode | null, tasks: Task[], today: string) {
   const [available, setAvailable] = useState(false)
   const [found, setFoundState] = useState<Found | null>(null)
   const [problem, setProblem] = useState<string | null>(null)
+  /** What the last check read: the proof, shown with what Recoger found (or didn't). */
+  const scan = useRef('')
   const latest = useRef({ tasks, today, found: null as Found | null })
   useEffect(() => {
     latest.current.tasks = tasks
@@ -54,6 +56,8 @@ export function useInbox(mode: AiMode | null, tasks: Task[], today: string) {
       checkedAt.current = Date.now()
       if (!gathered) return
       const { candidates, problems } = gathered
+      const { scanLine } = await import('./connectors')
+      scan.current = scanLine(gathered.scanned)
       setProblem(problems[0] ?? null)
       if (!candidates.length) {
         setFound(null)
@@ -65,7 +69,7 @@ export function useInbox(mode: AiMode | null, tasks: Task[], today: string) {
       if (waiting && waiting.keys.length === keys.size && waiting.keys.every((k) => keys.has(k))) return
       const { extract } = await import('./extract')
       const next = await extract('claude', latest.current.tasks, latest.current.today, candidates)
-      if (next.count) setFound(next)
+      if (next.count) setFound({ ...next, scan: scan.current })
       else {
         // Read and nothing to do: don't read these again.
         markSeen(next.keys)
@@ -105,15 +109,17 @@ export function useInbox(mode: AiMode | null, tasks: Task[], today: string) {
       const gathered = await gather(isSeen, watchedTasks(latest.current.tasks), knownNotes(latest.current.tasks))
       checkedAt.current = Date.now()
       if (!gathered) return { none: true, problem: 'Esta página no puede leer tu correo aquí' }
+      const { scanLine } = await import('./connectors')
+      scan.current = scanLine(gathered.scanned)
       setProblem(gathered.problems[0] ?? null)
-      if (!gathered.candidates.length) return { none: true, problem: gathered.problems[0] }
+      if (!gathered.candidates.length) return { none: true, problem: gathered.problems[0], scan: scan.current }
       const { extract } = await import('./extract')
       const next = await extract('claude', latest.current.tasks, latest.current.today, gathered.candidates)
-      if (next.count) setFound(next)
+      if (next.count) setFound({ ...next, scan: scan.current })
       else markSeen(next.keys)
     }
     const waiting = latest.current.found
-    return waiting ? { found: waiting } : { none: true, problem: problem ?? undefined }
+    return waiting ? { found: waiting } : { none: true, problem: problem ?? undefined, scan: scan.current }
   }, [problem, setFound])
 
   /** The user has seen these (accepted or not): they won't be proposed again. */

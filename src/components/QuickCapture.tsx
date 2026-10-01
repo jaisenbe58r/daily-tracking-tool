@@ -292,7 +292,10 @@ function AiPanel({ job, preview, onAccept, onClose, onRetry, onKey, onGmail, acc
   }
   return (
     <div className="capture-panel" role="status" aria-live="polite">
-      <span className="ai-summary">{job.summary}</span>
+      <span className="ai-summary">
+        {job.summary.split('\n')[0]}
+        {job.summary.includes('\n') && <span className="ai-scan">{job.summary.split('\n').slice(1).join(' ')}</span>}
+      </span>
       {job.changes.length > 0 && (preview || <Changes changes={job.changes} />)}
       <span className="capture-foot">
         {job.changes.length > 0 && (

@@ -28,6 +28,7 @@ import { snapshot } from './ai/ops'
 import { hideSnoozed, snoozedCount } from './lib/snooze'
 import { NoticeContext, useNoticeValue } from './lib/teach'
 import { useEventLog } from './memory/log'
+import { useCloudSync, type Sheet } from './lib/cloud'
 
 // The memory is its own view: loaded the first time it opens, so the sheet stays light.
 const MemoryView = lazy(() => import('./memory/MemoryView'))
@@ -136,6 +137,15 @@ export default function App() {
 
   const notify = useCallback((text: string) => setToast({ text, id: Date.now() }), [])
   const notice = useNoticeValue(notify)
+  // Inside claude.ai the sheet also lives in the artifact's own store: the same tasks on every device.
+  const fromCloud = useCallback(
+    (sheet: Sheet) => {
+      dispatch({ type: 'replace', tasks: sheet.tasks })
+      replaceTemplates(sheet.templates)
+    },
+    [dispatch, replaceTemplates],
+  )
+  useCloudSync({ tasks: state.tasks, templates, replace: fromCloud, notify })
   const { teach } = notice
   useEffect(() => {
     if (!toast) return
@@ -387,13 +397,14 @@ export default function App() {
       const got = await take()
       if (run !== captureRun.current) return // closed meanwhile: what was found keeps waiting in the header
       if ('found' in got) {
-        present(RECOGER, got.found)
+        // Second line: what was read, so it's clear every source was looked at.
+        present(RECOGER, got.found.scan ? { ...got.found, summary: `${got.found.summary}\nLeído: ${got.found.scan}` } : got.found)
         clear(got.found)
       } else {
         cancelAi()
         setCapturing(false)
         restoreFocus()
-        notify(got.problem ?? 'Nada nuevo en tu correo, tu agenda ni tus reuniones')
+        notify(got.problem ?? (got.scan ? `Nada nuevo. Leído: ${got.scan}` : 'Nada nuevo en tu correo, tu agenda ni tus reuniones'))
       }
     } catch (error) {
       if (run === captureRun.current) fail(RECOGER, error)
@@ -922,7 +933,7 @@ export default function App() {
                           const made = planFromPicks(job.picks, next, todayKey)
                           if (made) setPlan(made)
                         }
-                        notify(`${job.summary} · ${isMac ? '⌘' : 'Ctrl+'}Z deshace`)
+                        notify(`${job.summary.split('\n')[0]} · ${isMac ? '⌘' : 'Ctrl+'}Z deshace`)
                       } else return
                       ai.cancel()
                       setCapturing(false)

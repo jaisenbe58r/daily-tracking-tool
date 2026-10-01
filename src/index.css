@@ -720,6 +720,8 @@ textarea::placeholder { color: color-mix(in srgb, var(--grey) 60%, var(--paper))
   animation: qa-in 140ms var(--ease);
 }
 .ai-summary { font-size: 14px; }
+/* Under Recoger's summary: what was read, so it's clear every source was looked at. */
+.ai-scan { display: block; margin-top: 2px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; color: var(--grey); }
 .ai-key {
   border: 0;
   border-bottom: 1px solid var(--rule, currentColor);

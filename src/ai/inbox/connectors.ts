@@ -75,23 +75,49 @@ function previewSeen(t: GmailThread, seen: Seen): boolean {
   return Boolean(t.id && last?.id && msgs.length < 5 && seen({ id: t.id, version: last.id }))
 }
 
-const SEARCHES: { kind: Kind; query: string; pageSize: number }[] = [
-  { kind: 'ask', query: 'in:inbox newer_than:7d -from:me -category:promotions -category:social -category:forums', pageSize: 50 },
-  { kind: 'starred', query: 'is:starred newer_than:60d', pageSize: 20 },
-  { kind: 'waiting', query: 'in:sent newer_than:10d older_than:2d', pageSize: 30 },
+const SEARCHES: { kind: Kind; query: string; pageSize: number; pages: number }[] = [
+  // A busy inbox has ~200 threads a week: one page of 50 only reached back two days.
+  { kind: 'ask', query: 'in:inbox newer_than:7d -from:me -category:promotions -category:social -category:forums', pageSize: 50, pages: 6 },
+  { kind: 'starred', query: 'is:starred newer_than:60d', pageSize: 20, pages: 1 },
+  { kind: 'waiting', query: 'in:sent newer_than:10d older_than:2d', pageSize: 30, pages: 2 },
 ]
+
+/** What a check looked at, per source: the proof that it read anything at all. */
+export interface Scanned {
+  /** Threads looked at in Gmail (all searches, without repeats) and how many were read in full. */
+  gmail?: { threads: number; read: number }
+  /** Events in the coming week. */
+  calendar?: { events: number }
+  /** Meeting notes of the last two weeks. */
+  granola?: { notes: number }
+  /** Sources that couldn't be read, with a word on why. */
+  failed: { source: 'Gmail' | 'Agenda' | 'Granola'; why: string }[]
+}
+
+async function search(m: Mcp, query: string, pageSize: number, pages: number): Promise<GmailThread[]> {
+  const out: GmailThread[] = []
+  let pageToken: string | undefined
+  for (let i = 0; i < pages; i++) {
+    const res = await call<{ threads?: GmailThread[]; nextPageToken?: string }>(m, GMAIL, 'search_threads', {
+      query,
+      pageSize,
+      view: 'THREAD_VIEW_MINIMAL',
+      ...(pageToken ? { pageToken } : {}),
+    })
+    out.push(...(res.threads ?? []))
+    pageToken = res.nextPageToken
+    if (!pageToken) break
+  }
+  return out
+}
 /** Threads read in full per check. The rest waits for the next one. */
-const MAX_THREADS = 30
+const MAX_THREADS = 40
 
 type Seen = (c: Pick<Candidate, 'id' | 'version'>) => boolean
 
-async function gmail(m: Mcp, me: Set<string>, now: number, seen: Seen): Promise<Candidate[]> {
-  const found = await Promise.all(
-    SEARCHES.map(async ({ kind, query, pageSize }) => {
-      const { threads = [] } = await call<{ threads?: GmailThread[] }>(m, GMAIL, 'search_threads', { query, pageSize, view: 'THREAD_VIEW_MINIMAL' })
-      return { kind, threads }
-    }),
-  )
+async function gmail(m: Mcp, me: Set<string>, now: number, seen: Seen, scanned: Scanned): Promise<Candidate[]> {
+  const found = await Promise.all(SEARCHES.map(async ({ kind, query, pageSize, pages }) => ({ kind, threads: await search(m, query, pageSize, pages) })))
+  const looked = new Set(found.flatMap(({ threads }) => threads.flatMap((t) => (t.id ? [t.id] : []))))
   // The user's own address: the sender of anything they sent.
   for (const { kind, threads } of found)
     if (kind === 'waiting') for (const t of threads) for (const msg of t.messages ?? []) if (msg.sender && msg.labelIds?.includes('SENT')) me.add(address(msg.sender))
@@ -110,14 +136,16 @@ async function gmail(m: Mcp, me: Set<string>, now: number, seen: Seen): Promise<
         wanted.push({ kind, id: t.id })
       }
 
-  const full = await pool(wanted.slice(0, MAX_THREADS), 4, async ({ kind, id }) => {
+  const reading = wanted.slice(0, MAX_THREADS)
+  scanned.gmail = { threads: looked.size, read: reading.length }
+  const full = await pool(reading, 4, async ({ kind, id }) => {
     const thread = await call<GmailThread>(m, GMAIL, 'get_thread', { threadId: id, messageFormat: 'PLAIN_TEXT' }).catch(() => null)
     return thread ? candidatesFromThreads([thread], me, kind, now) : []
   })
   return full.flat()
 }
 
-async function calendar(m: Mcp, me: Set<string>, now: number): Promise<Candidate[]> {
+async function calendar(m: Mcp, me: Set<string>, now: number, scanned: Scanned): Promise<Candidate[]> {
   const payload = await call<{ events?: CalendarEvent[]; summary?: string }>(m, CALENDAR, 'list_events', {
     startTime: new Date(now).toISOString(),
     endTime: new Date(now + 7 * 86_400_000).toISOString(),
@@ -126,6 +154,7 @@ async function calendar(m: Mcp, me: Set<string>, now: number): Promise<Candidate
   })
   // The primary calendar is named after its owner's address.
   if (payload.summary?.includes('@')) me.add(address(payload.summary))
+  scanned.calendar = { events: payload.events?.length ?? 0 }
   return candidatesFromEvents(payload.events ?? [], me)
 }
 
@@ -155,8 +184,9 @@ async function readMeetings(m: Mcp, ids: string[]): Promise<GranolaMeeting[]> {
 }
 
 /** Meeting notes of the last two weeks not proposed yet. A note still empty waits for a later check. */
-async function granola(m: Mcp, now: number, seen: Seen, known: Set<string>): Promise<Candidate[]> {
+async function granola(m: Mcp, now: number, seen: Seen, known: Set<string>, scanned: Scanned): Promise<Candidate[]> {
   const listed = await listMeetings(m, now - GRANOLA_DAYS * DAY_MS, now + DAY_MS)
+  scanned.granola = { notes: listed.filter((x) => !(x.at > now)).length }
   const fresh = listed
     .filter((x) => !(x.at > now) && !known.has(x.id) && !seen({ id: x.id, version: 'notas' }))
     .sort((a, b) => (b.at || 0) - (a.at || 0))
@@ -185,6 +215,31 @@ export interface Gathered {
   candidates: Candidate[]
   /** One line per source that couldn't be read, for the user. */
   problems: string[]
+  scanned: Scanned
+}
+
+/** Why a source failed, in one or two words for the scan line. */
+function shortProblem(error: unknown): string {
+  const code = (error as McpError)?.code
+  if (code === 'server_not_connected' || code === 'selection_required') return 'sin conectar'
+  if (code === 'needs_reauth') return 'reconectar'
+  if (code === 'not_in_manifest' || code === 'not_granted') return 'sin permiso'
+  if (code === 'unreadable') return 'formato desconocido'
+  return 'sin respuesta'
+}
+
+/** «Gmail 187 hilos · Agenda 6 eventos · Granola sin conectar»: what the last check read, in one line. */
+export function scanLine(s: Scanned): string {
+  const parts: string[] = []
+  const failed = (source: Scanned['failed'][number]['source']) => s.failed.find((f) => f.source === source)
+  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
+  const g = failed('Gmail')
+  parts.push(g ? `Gmail ${g.why}` : s.gmail ? `Gmail ${plural(s.gmail.threads, 'hilo', 'hilos')} (7 días)` : '')
+  const c = failed('Agenda')
+  parts.push(c ? `Agenda ${c.why}` : s.calendar ? `Agenda ${plural(s.calendar.events, 'evento', 'eventos')} (próx. 7 días)` : '')
+  const n = failed('Granola')
+  parts.push(n ? `Granola ${n.why}` : s.granola ? `Granola ${plural(s.granola.notes, 'nota', 'notas')} (14 días)` : '')
+  return parts.filter(Boolean).join(' · ')
 }
 
 /**
@@ -198,23 +253,20 @@ export async function gather(seen: Seen, watched: Watched[] = [], known: Set<str
   const now = Date.now()
   const me = new Set<string>()
   const problems: string[] = []
+  const scanned: Scanned = { failed: [] }
+  const failed = (server: string, source: Scanned['failed'][number]['source']) => (error: unknown): Candidate[] => {
+    problems.push(sourceProblem(server, error))
+    scanned.failed.push({ source, why: shortProblem(error) })
+    return []
+  }
   // Calendar first: it tells who the user is, which Gmail's rules need.
-  const events = await calendar(m, me, now).catch((error) => {
-    problems.push(sourceProblem(CALENDAR, error))
-    return []
-  })
-  const mails = await gmail(m, me, now, seen).catch((error) => {
-    problems.push(sourceProblem(GMAIL, error))
-    return []
-  })
-  const notes = await granola(m, now, seen, known).catch((error) => {
-    problems.push(sourceProblem(GRANOLA, error))
-    return []
-  })
+  const events = await calendar(m, me, now, scanned).catch(failed(CALENDAR, 'Agenda'))
+  const mails = await gmail(m, me, now, seen, scanned).catch(failed(GMAIL, 'Gmail'))
+  const notes = await granola(m, now, seen, known, scanned).catch(failed(GRANOLA, 'Granola'))
   // Replies first: a thread that answers a waiting task is that, not a new question.
   const answers = await replies(m, me, watched).catch(() => [])
   const candidates = dedupe([...answers, ...mails, ...events, ...notes]).filter((c) => !seen(c))
-  return { candidates, problems }
+  return { candidates, problems, scanned }
 }
 
 /** One Gmail thread, whole, for a draft. Null outside claude.ai or when it can't be read. */
