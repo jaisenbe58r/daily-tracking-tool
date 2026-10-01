@@ -4,7 +4,7 @@
  * test; reading the connectors lives in `connectors.ts`.
  */
 
-export type Kind = 'ask' | 'starred' | 'waiting' | 'invite' | 'reply' | 'meeting'
+export type Kind = 'ask' | 'starred' | 'waiting' | 'invite' | 'reply' | 'followup' | 'meeting'
 
 export interface Candidate {
   kind: Kind
@@ -21,7 +21,7 @@ export interface Candidate {
   /** What the model reads: the last message (trimmed), the event's details, or the meeting's notes. */
   body: string
   url: string
-  /** `reply`: the open task (its id) this answer may close. */
+  /** `reply`, `followup`: the open task (its id) this news may close. */
   taskId?: string
 }
 
@@ -185,6 +185,7 @@ const KIND_LABEL: Record<Kind, string> = {
   waiting: 'esperas respuesta',
   invite: 'invitación sin responder',
   reply: 'respuesta a tu tarea',
+  followup: 'novedad en el hilo de tu tarea',
   meeting: 'notas de tu reunión',
 }
 
@@ -232,43 +233,58 @@ export function sourceId(source: { app: 'gmail' | 'calendar' | 'granola'; url: s
   }
 }
 
-/** An open task waiting on someone, whose thread a reply may close. */
+/** An open task from a mail, whose thread may since have moved: answered, solved, or a reply that closes it. */
 export interface Watched {
   taskId: string
   threadId: string
   /** Replies before this (ms) were already there when the task was written. */
   since: number
+  /** Waits on someone (#esperando, or found as "esperas respuesta"): only their answer counts. */
+  waiting: boolean
 }
 
-/** Open tasks from a mail that wait on someone: tagged #esperando, or found as "esperas respuesta". */
+/** Every open task from a Gmail thread, the ones waiting on someone first, then the newest. */
 export function watchedTasks(tasks: { id: string; status: string; tags: string[]; createdAt: number; source?: { app: 'gmail' | 'calendar' | 'granola'; url: string; id?: string; waiting?: boolean } | null }[]): Watched[] {
   const out: Watched[] = []
   for (const t of tasks) {
     if (t.status === 'done' || t.source?.app !== 'gmail') continue
-    if (!t.tags.includes('esperando') && !t.source.waiting) continue
     const threadId = sourceId(t.source)
-    if (threadId) out.push({ taskId: t.id, threadId, since: t.createdAt })
+    if (threadId) out.push({ taskId: t.id, threadId, since: t.createdAt, waiting: t.tags.includes('esperando') || Boolean(t.source.waiting) })
   }
-  return out
+  return out.sort((a, b) => Number(b.waiting) - Number(a.waiting) || b.since - a.since)
 }
 
-/** Someone other than the user wrote in the thread after the task was written: maybe the answer. */
+/** Messages in the thread kept for a follow-up: the newest few written after the task. */
+const FOLLOWUP_MESSAGES = 3
+
+/**
+ * The thread behind a task moved after the task was written: maybe it's done.
+ * Waiting: someone other than the user answered. Otherwise any person wrote,
+ * the user included (they may have replied already, outside the sheet).
+ */
 export function replyCandidate(thread: GmailThread, w: Watched, me: Set<string>): Candidate | null {
   const msgs = thread.messages ?? []
   const last = lastOf(msgs)
   if (!thread.id || !last?.id) return null
-  if (last.labelIds?.includes('SENT') || isMe(last.sender, me) || AUTOMATED.test(last.sender ?? '')) return null
-  const at = Date.parse(last.date ?? '')
-  if (!Number.isFinite(at) || at <= w.since) return null
+  const mine = (m: GmailMessage) => Boolean(m.labelIds?.includes('SENT')) || isMe(m.sender, me)
+  const after = (m: GmailMessage) => Date.parse(m.date ?? '') > w.since
+  if (!after(last) || AUTOMATED.test(last.sender ?? '')) return null
+  if (w.waiting && mine(last)) return null
+  const subject = (msgs.find((m) => m.subject)?.subject ?? '(sin asunto)').trim()
+  if (w.waiting) {
+    return { kind: 'reply', id: thread.id, version: last.id, source: 'Gmail', title: subject, from: last.sender ?? '', when: last.date ?? '', body: cleanBody(last.plaintextBody ?? last.snippet ?? ''), url: thread.viewUrl ?? '', taskId: w.taskId }
+  }
+  const news = msgs.filter((m) => after(m) && !AUTOMATED.test(m.sender ?? '')).slice(-FOLLOWUP_MESSAGES)
+  const who = (m: GmailMessage) => (mine(m) ? 'yo' : (m.sender ?? ''))
   return {
-    kind: 'reply',
+    kind: 'followup',
     id: thread.id,
     version: last.id,
     source: 'Gmail',
-    title: (msgs.find((m) => m.subject)?.subject ?? '(sin asunto)').trim(),
-    from: last.sender ?? '',
+    title: subject,
+    from: news.map(who).join(', '),
     when: last.date ?? '',
-    body: cleanBody(last.plaintextBody ?? last.snippet ?? ''),
+    body: news.map((m) => `${who(m)}: ${cleanBody(m.plaintextBody ?? m.snippet ?? '')}`).join('\n\n'),
     url: thread.viewUrl ?? '',
     taskId: w.taskId,
   }
