@@ -1,6 +1,8 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BoardView } from './components/BoardView'
 import { ListView } from './components/ListView'
+import { KeysBar } from './components/KeysBar'
+import { peopleIn } from './lib/suggest'
 import type { QuickItem } from './components/QuickActions'
 import { QuickCapture } from './components/QuickCapture'
 import { SearchBar, type MeaningSearch } from './components/SearchBar'
@@ -64,6 +66,7 @@ export default function App() {
   const listState = useMemo(() => (shown === state.tasks ? state : { ...state, tasks: shown }), [shown, state])
 
   const tags = useMemo(() => allTags(state.tasks), [state.tasks])
+  const people = useMemo(() => peopleIn(state.tasks), [state.tasks])
   // A tag filter pointing at a tag nobody uses any more would show an empty sheet.
   const tag = filters.tag && tags.includes(filters.tag) ? filters.tag : null
   const effective = useMemo(() => ({ ...filters, tag }), [filters, tag])
@@ -75,6 +78,7 @@ export default function App() {
   )
   const fileRef = useRef<HTMLInputElement>(null)
   const { templates, save: saveTemplate, remove: removeTemplate, replaceAll: replaceTemplates } = useTemplates()
+  const [selectedRows, setSelectedRows] = useState(0)
   const [capturing, setCapturing] = useState(false)
   /** What the capture line opens with: the task it's about (AI context) and any text to send right away. */
   const [seed, setSeed] = useState<Seed>({ taskId: null, text: '', mode: 'changes' })
@@ -639,40 +643,21 @@ export default function App() {
               onTagClick={toggleTag}
               extraActions={extraActions}
               focused={focused}
+              onSelection={setSelectedRows}
             />
           ) : (
             <BoardView tasks={shown} dispatch={dispatch} filters={effective} onTagClick={toggleTag} />
           )}
         </main>
 
-        <footer className="hints" aria-hidden>
-          {view === 'list' ? (
-            <>
-              <span><kbd>↵</kbd> nueva</span>
-              <span><kbd>⇥</kbd> subtarea</span>
-              <span><kbd>{isMac ? '⌘' : 'Ctrl'}↵</kbd> completar</span>
-              <span><kbd>/</kbd> acciones</span>
-            </>
-          ) : (
-            <>
-              <span><kbd>←</kbd><kbd>→</kbd> cambiar columna</span>
-              <span><kbd>↑</kbd><kbd>↓</kbd> moverse</span>
-              <span><kbd>↵</kbd> editar</span>
-              <span><kbd>{isMac ? '⌘' : 'Ctrl'}↵</kbd> completar</span>
-            </>
-          )}
-          <span><kbd>{isMac ? '⌘' : 'Ctrl'}K</kbd> capturar</span>
-          <span><kbd>{isMac ? '⌘' : 'Ctrl'}F</kbd> buscar</span>
-          <span><kbd>{isMac ? '⌥' : 'Alt+'}T</kbd> hoy</span>
-          <span><kbd>{isMac ? '⌥' : 'Alt+'}1</kbd><kbd>{isMac ? '⌥' : 'Alt+'}2</kbd> vista</span>
-          <span><kbd>{isMac ? '⌥' : 'Alt+'}M</kbd> memoria</span>
-        </footer>
+        <KeysBar view={view} selected={view === 'list' ? selectedRows : 0} ai={ai.available} inbox={inbox.available} />
         </>
         )}
 
         {capturing && (
           <QuickCapture
             initialText={seed.text}
+            pool={{ tags, people }}
             onCapture={(text) => {
               dispatch({ type: 'create', text, status: 'todo', inherit: inheritFromFilters(effective, todayKey) })
               setCapturing(false)

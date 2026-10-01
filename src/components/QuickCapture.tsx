@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { AiJob } from '../ai/useAi'
 import type { Change } from '../ai/ops'
 import { dictation, type Dictation } from '../ai/voice'
+import { complete, suggestions, tokenAt } from '../lib/suggest'
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
 const M = isMac ? '⌘' : 'Ctrl'
@@ -22,6 +23,8 @@ interface Props {
   /** Present only when an AI runtime answered; otherwise capture is local only. */
   ai?: AiControls | null
   initialText?: string
+  /** Tags and people already in the sheet, offered as you type `#` or `@`. */
+  pool?: { tags: string[]; people: string[] }
 }
 
 /**
@@ -31,7 +34,7 @@ interface Props {
  * instead and the answer comes back as a preview under the line, growing as
  * it streams: Enter applies it, Esc drops it.
  */
-export function QuickCapture({ onCapture, onClose, ai, initialText = '' }: Props) {
+export function QuickCapture({ onCapture, onClose, ai, initialText = '', pool }: Props) {
   const [text, setText] = useState(initialText)
   const [listening, setListening] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -40,6 +43,22 @@ export function QuickCapture({ onCapture, onClose, ai, initialText = '' }: Props
   useEffect(() => () => mic.current?.stop(), [])
   const job = ai?.job ?? null
   const canDictate = typeof window !== 'undefined' && dictation.supported()
+
+  // Autocomplete for the #tag or @name at the caret.
+  const [caret, setCaret] = useState(initialText.length)
+  const [pick, setPick] = useState(0)
+  const [hidden, setHidden] = useState<number | null>(null)
+  const token = pool && !ai?.job ? tokenAt(text, caret) : null
+  const words = token && hidden !== token.start ? suggestions(token, pool!) : []
+  const chosen = Math.min(pick, Math.max(words.length - 1, 0))
+  const accept = (word: string) => {
+    if (!token) return
+    const next = complete(text, token, caret, word)
+    setText(next.text)
+    setCaret(next.caret)
+    setPick(0)
+    requestAnimationFrame(() => inputRef.current?.setSelectionRange(next.caret, next.caret))
+  }
 
   const close = () => {
     mic.current?.stop()
@@ -52,7 +71,7 @@ export function QuickCapture({ onCapture, onClose, ai, initialText = '' }: Props
     ai.onAsk(text.trim())
     inputRef.current?.focus()
   }
-  const accept = () => {
+  const acceptAnswer = () => {
     if (job?.phase === 'proposal' && !job.changes.length) close()
     else ai?.onAccept()
   }
@@ -91,19 +110,31 @@ export function QuickCapture({ onCapture, onClose, ai, initialText = '' }: Props
           placeholder={ai ? `Apunta una tarea…   o pídeselo a la IA con ${M}↵` : 'Apunta una tarea…   #tag   !   mañana'}
           autoComplete="off"
           enterKeyHint={answered ? 'done' : 'enter'}
+          onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
           onChange={(e) => {
             setText(e.target.value)
+            setCaret(e.target.selectionStart ?? e.target.value.length)
+            setPick(0)
             // Editing the request drops the answer to the old one.
             if (job) ai?.onCancel()
           }}
           onKeyDown={(e) => {
             const mod = isMac ? e.metaKey : e.ctrlKey
-            if (e.key === 'Enter' && mod && ai && text.trim()) {
+            if (words.length && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+              e.preventDefault()
+              setPick((chosen + (e.key === 'ArrowDown' ? 1 : -1) + words.length) % words.length)
+            } else if (words.length && (e.key === 'Tab' || (e.key === 'Enter' && !mod && token!.prefix))) {
+              e.preventDefault()
+              accept(words[chosen])
+            } else if (words.length && e.key === 'Escape') {
+              e.preventDefault()
+              setHidden(token!.start)
+            } else if (e.key === 'Enter' && mod && ai && text.trim()) {
               e.preventDefault()
               askAi()
             } else if (e.key === 'Enter' && answered) {
               e.preventDefault()
-              accept()
+              acceptAnswer()
             } else if (e.key === 'Enter' && !job && text.trim()) {
               e.preventDefault()
               mic.current?.stop()
@@ -143,10 +174,27 @@ export function QuickCapture({ onCapture, onClose, ai, initialText = '' }: Props
         ) : (
           !job && <kbd>↵</kbd>
         )}
+        {words.length > 0 && (
+          <ul className="capture-panel suggest" role="listbox" aria-label={token!.kind === '#' ? 'Tags' : 'Personas y fechas'}>
+            {words.map((w, i) => (
+              <li
+                key={w}
+                role="option"
+                aria-selected={i === chosen}
+                className="qa-item"
+                onPointerDown={(e) => { e.preventDefault(); accept(w) }}
+                onPointerMove={() => setPick(i)}
+              >
+                <span>{token!.kind}{w}</span>
+                {i === chosen && <kbd>Tab</kbd>}
+              </li>
+            ))}
+          </ul>
+        )}
         {job && (
           <AiPanel
             job={job}
-            onAccept={accept}
+            onAccept={acceptAnswer}
             onClose={close}
             onRetry={askAi}
             onKey={(key) => {

@@ -4,7 +4,7 @@ import type { Task } from '../lib/types'
 import { Balance, Bars, Estratos, Pulso, Trama } from './charts'
 import {
   activeDay, addDays, buildMemory, chronology, day, dayOf, daysBetween, flight, longDay, median, monthName, pageFor, pageName,
-  perWeek, related, shortDay, trama, yearDay, zeroDays, type Memory, type PageKey,
+  perWeek, related, shortDay, trama, tramaAll, yearDay, zeroDays, type Memory, type PageKey,
 } from './graph'
 import type { LogEvent } from './log'
 
@@ -36,7 +36,7 @@ export default function MemoryView({ tasks, log, startTask, onClose, onOpenTask 
   const searchRef = useRef<HTMLInputElement>(null)
 
   // A page whose subject disappeared from the sheet falls back to the overview.
-  const exists = (k: PageKey) => k === 'panorama' || k.startsWith('d:') || mem.index.has(k)
+  const exists = (k: PageKey) => k === 'panorama' || k === 'trama' || k.startsWith('d:') || mem.index.has(k)
   const current = exists(page) ? page : 'panorama'
 
   const go = useCallback<Go>(
@@ -95,6 +95,7 @@ export default function MemoryView({ tasks, log, startTask, onClose, onOpenTask 
 
   let body: ReactNode
   if (current === 'panorama') body = <Panorama mem={mem} go={go} open={onOpenTask} />
+  else if (current === 'trama') body = <TramaPage mem={mem} go={go} />
   else if (current.startsWith('d:')) body = <DayPage mem={mem} d={current.slice(2)} go={go} open={onOpenTask} />
   else body = <EntityPage key={current} mem={mem} k={current} go={go} open={onOpenTask} />
 
@@ -171,6 +172,7 @@ function Index({ mem, current, go, query, setQuery, searchRef }: {
       <>
         <div className="m-navsec">
           {row('panorama', 'Panorama')}
+          {row('trama', 'Trama')}
           {row(`d:${mem.today}`, 'Diario de hoy', shortDay(mem.today))}
         </div>
         {mem.projects.length > 0 && (
@@ -402,6 +404,20 @@ function DayPage({ mem, d, go, open }: { mem: Memory; d: string; go: Go; open: (
 }
 
 const dayWritten = (mem: Memory, d: string) => mem.tasks.filter((t) => dayOf(t.createdAt) === d).length
+
+// ── Trama ───────────────────────────────────────────────
+
+function TramaPage({ mem, go }: { mem: Memory; go: Go }) {
+  const rows = tramaAll(mem)
+  return (
+    <>
+      <div className="m-eyebrow">Trama · desde el {shortDay(mem.weeks[0])}</div>
+      <h1 className="m-h1">Con quién y con qué, semana a semana</h1>
+      <p className="m-q">Cada fila es un proyecto, una persona o un tema; cada columna, una semana. Pulsa una fila para ir a su página o una celda para ir a ese día. Cada página tiene su propia Trama con lo que se cruza con ella.</p>
+      {rows.length > 1 ? <Trama mem={mem} rows={rows} go={go} /> : <p className="m-meta">Aún no hay proyectos (tareas con dos o más subtareas), <code>@personas</code> ni <code>#temas</code> que cruzar.</p>}
+    </>
+  )
+}
 
 // ── Panorama ────────────────────────────────────────────
 
