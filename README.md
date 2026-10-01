@@ -15,6 +15,8 @@ npm run build
 
 Los datos se guardan solos en `localStorage` del navegador (clave `daily-tracking-tool:v1`) y se sincronizan entre pestañas abiertas. Al cargar se validan y se reparan (campos que faltan, tareas huérfanas o ciclos), así que un dato corrupto nunca deja la hoja inservible.
 
+Dentro de claude.ai cada enlace de artifact es un sitio distinto, así que el navegador guarda una hoja aparte por enlace y por dispositivo. Por eso, cuando la app se publica como artifact con las capacidades `db` y `user`, la hoja y las plantillas se guardan además en la base de datos del propio artifact, en tu parte privada (`data/users/<tu id>/folio-*`): la misma hoja en todos tus dispositivos y en cada versión republicada de ese enlace. La primera vez sube lo que haya en ese navegador; si dos dispositivos cambiaron a la vez, se unen las tareas de ambos. El historial de la Memoria sigue solo en el navegador (va en la copia JSON).
+
 ## Escribir rápido
 
 Al pulsar Enter (o salir de la línea), el texto se interpreta:
@@ -96,7 +98,7 @@ Al modelo solo le llega tu petición y una lista compacta de las tareas (texto, 
    ```
 
    `AI_MODEL` cambia el modelo (por defecto `anthropic/claude-haiku-4-5`; también vale `openai/...` o `google/...` con su clave).
-2. **Dentro de claude.ai** (la vista previa publicada como artifact): usa Claude con tu propia cuenta. No hace falta clave; claude.ai te pide permiso la primera vez. Para Recoger, el artifact se publica con las capacidades `sample` y `mcp` (conectores `Gmail`: `search_threads`, `get_thread`; `Google Calendar`: `list_events`; `Granola`: `list_meetings`, `get_meetings`), y claude.ai pide permiso una vez por conector.
+2. **Dentro de claude.ai** (la vista previa publicada como artifact): usa Claude con tu propia cuenta. No hace falta clave; claude.ai te pide permiso la primera vez. Para Recoger, el artifact se publica con las capacidades `sample`, `mcp`, `db` y `user` (conectores `Gmail`: `search_threads`, `get_thread`; `Google Calendar`: `list_events`; `Granola`: `list_meetings`, `get_meetings`), y claude.ai pide permiso una vez por conector.
 3. **Clave en el navegador** (una copia local o en un hosting estático, sin servidor): la primera vez que pides algo a la IA, la línea te pide tu clave de Anthropic. Se guarda solo en ese navegador (`localStorage`) y el navegador llama directamente a Anthropic. En `/`, «Olvidar la clave de la IA» la borra. `VITE_AI_MODEL` cambia el modelo (por defecto `claude-haiku-4-5`).
 
 Sin ninguna de las tres, la app funciona igual.
@@ -161,6 +163,7 @@ La vista, el orden y los filtros se recuerdan en cada navegador.
 - `src/lib/tree.ts`: operaciones puras sobre el árbol. Las tareas viven en un array plano con `parentId`; el orden manual es el orden relativo en el array.
 - `src/lib/store.ts`: reducer, foco e historial de deshacer.
 - `src/lib/persist.ts`: guardado en `localStorage` y validación de lo guardado.
+- `src/lib/cloud.ts`: copia de la hoja en la base de datos del artifact cuando la app corre dentro de claude.ai.
 - `src/lib/parse.ts`: la gramática de captura (`#tag`, `!`, fechas) y el pegado de listas.
 - `src/lib/backup.ts`: exportar e importar JSON.
 - `src/lib/organize.ts`: ordenar, agrupar y filtrar (puro, con tests).
