@@ -24,6 +24,8 @@ export interface Task {
   source?: Source | null
   /** Posponer: hidden (with its subtasks) until `until`; back at the top that day. */
   snooze: Snooze | null
+  /** The AI already looked for this task's key phrase (Subrayar), whether or not it marked one. */
+  autoMarked?: boolean
 }
 
 export interface Source {

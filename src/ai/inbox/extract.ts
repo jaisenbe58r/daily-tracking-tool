@@ -3,6 +3,7 @@ import type { AiMode } from '../config'
 import { snapshot, type Op } from '../ops'
 import { describeCandidates, seenKey, type Candidate } from './sources'
 import { normalize, quoted } from './granola'
+import { plain } from '../../lib/mark'
 
 /** What «Recoger» found, ready to show as a proposal. */
 export interface Found {
@@ -97,7 +98,7 @@ export async function extract(mode: AiMode, tasks: Task[], today: string, candid
   const { ask } = await import('../client')
   const proposal = await ask(mode, { tool: 'propose_changes', request: REQUEST, context, signal })
   const report = { dropped: 0 }
-  const open = tasks.filter((t) => t.status !== 'done').map((t) => t.text)
+  const open = tasks.filter((t) => t.status !== 'done').map((t) => plain(t.text))
   const ops = finish(proposal.ops, candidates, answered, { open, report })
   const replies = ops.filter((op) => op.op === 'update').length
   // The model's count included them: say what's really proposed.

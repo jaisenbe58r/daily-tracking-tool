@@ -55,6 +55,7 @@ export function sanitize(input: unknown): Task[] {
       repeat: REPEATS.includes(r.repeat as Repeat) ? (r.repeat as Repeat) : null,
       ...readSource(r),
       snooze: sanitizeSnooze(r.snooze),
+      ...(r.autoMarked === true ? { autoMarked: true } : {}),
     })
   }
   const byId = new Map(tasks.map((t) => [t.id, t]))

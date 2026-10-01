@@ -2,6 +2,7 @@ import type { Source, Status, Task } from '../lib/types'
 import * as tree from '../lib/tree'
 import { dateKey } from '../lib/parse'
 import { plantNext } from '../lib/repeat'
+import { plain } from '../lib/mark'
 
 /** What the agent can propose. Validated by `proposalSchema` (schema.ts) before it gets here. */
 export interface Op {
@@ -55,7 +56,7 @@ export function snapshot(tasks: Task[], today: string, selectedId: string | null
         refOf.set(t.id, ref)
         const parent = t.parentId ? refOf.get(t.parentId) : undefined
         const marks = [...t.tags.map((g) => `#${g}`), t.priority ? '!' : '', t.repeat ? `↻${t.repeat}` : ''].filter(Boolean).join(' ')
-        lines.push([parent ? `${ref} < ${parent}` : ref, t.status, t.due ?? '-', marks || '-', t.text.trim()].join(' | '))
+        lines.push([parent ? `${ref} < ${parent}` : ref, t.status, t.due ?? '-', marks || '-', plain(t.text).trim()].join(' | '))
       }
       walk(t.id)
     }
@@ -151,7 +152,7 @@ export function applyOps(
       changes.push({ kind: 'move', text: task.text, detail: parent ? `bajo «${parent.text}»` : 'al primer nivel' })
     } else {
       const patch: Partial<Task> = {}
-      if (op.text?.trim() && op.text.trim() !== task.text) patch.text = op.text.trim()
+      if (op.text?.trim() && op.text.trim() !== task.text && op.text.trim() !== plain(task.text)) patch.text = op.text.trim()
       if (op.notes !== undefined && op.notes !== task.notes) patch.notes = op.notes
       if (op.tags) patch.tags = cleanTags(op.tags)
       if (op.due !== undefined) patch.due = validDue(op.due)
