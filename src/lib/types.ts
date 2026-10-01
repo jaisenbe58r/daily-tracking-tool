@@ -20,16 +20,16 @@ export interface Task {
   priority: boolean
   /** Recurring task: completing it plants the next occurrence right below. */
   repeat: Repeat | null
-  /** Where the task came from (Recoger): the mail, event or meeting note it opens. */
+  /** Where the task came from (Recoger), or the GitHub issue it's linked to: what Alt+O opens. */
   source?: Source | null
   /** Posponer: hidden (with its subtasks) until `until`; back at the top that day. */
   snooze: Snooze | null
 }
 
 export interface Source {
-  app: 'gmail' | 'calendar' | 'granola'
+  app: 'gmail' | 'calendar' | 'granola' | 'github'
   url: string
-  /** Gmail thread id, Calendar event id or Granola note id, to read it again (older tasks: read from the url). */
+  /** Gmail thread id, Calendar event id, Granola note id or GitHub `owner/repo#n`, to read it again (older tasks: read from the url). */
   id?: string
   /** Granola: the words in the note the task was taken from. */
   quote?: string

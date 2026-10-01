@@ -709,6 +709,9 @@ textarea::placeholder { color: color-mix(in srgb, var(--grey) 60%, var(--paper))
   color: var(--ink);
 }
 .ai-thinking { font-family: var(--mono); font-size: 12px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--grey); }
+/* Llevar a GitHub: the issue body as it will be sent, and what GitHub said when it said no. */
+.gh-body { font-family: var(--mono); font-size: 12px; line-height: 18px; color: var(--grey); max-height: 40vh; overflow: auto; }
+.gh-error { color: var(--ink); }
 .ai-thinking::after { content: '…'; display: inline-block; width: 1.5em; animation: ai-dots 1.2s steps(4) infinite; overflow: hidden; vertical-align: bottom; }
 @keyframes ai-dots { from { width: 0; } to { width: 1.5em; } }
 .ai-changes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }

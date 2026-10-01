@@ -1,5 +1,5 @@
 import { useEffect, useReducer } from 'react'
-import type { Inherit, Repeat, Status, Task } from './types'
+import type { Inherit, Repeat, Source, Status, Task } from './types'
 import * as tree from './tree'
 import { STORAGE_KEY, load, parse, save } from './persist'
 import { dateKey, parseOutline, parseTask } from './parse'
@@ -41,6 +41,8 @@ export type Action =
   | { type: 'create'; text: string; status: Status; inherit?: Inherit }
   /** Multi-line paste: one task per line, indentation as nesting, starting at `id`. */
   | { type: 'paste'; id: string; text: string; inherit?: Inherit }
+  /** Links the task to a GitHub issue (or unlinks it); an empty task takes the issue's title. */
+  | { type: 'link'; id: string; source: Source | null; title?: string }
   | { type: 'toggle-today'; id: string }
   | { type: 'toggle-priority'; id: string }
   /** Replaces everything (JSON import), as one undoable step. */
@@ -104,6 +106,13 @@ function reducer(state: State, action: Exclude<Action, { type: 'undo' | 'redo' }
   switch (action.type) {
     case 'edit':
       return { ...state, tasks: tree.update(tasks, action.id, action.patch) }
+
+    case 'link': {
+      const task = find(action.id)
+      if (!task) return state
+      const text = !task.text.trim() && action.title ? action.title : task.text
+      return { ...state, tasks: tree.update(tasks, task.id, { source: action.source, text }) }
+    }
 
     case 'commit': {
       const task = find(action.id)

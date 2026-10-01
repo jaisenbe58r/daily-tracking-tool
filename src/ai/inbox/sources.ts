@@ -203,7 +203,7 @@ export function describeCandidates(list: Candidate[], refOf: Map<string, string>
  * older ones only have the link: Gmail's `thread-f:<decimal>` is the thread id
  * in hex, and Calendar's `eid` is base64 of "<event id> <calendar>".
  */
-export function sourceId(source: { app: 'gmail' | 'calendar' | 'granola'; url: string; id?: string } | null | undefined): string | null {
+export function sourceId(source: { app: 'gmail' | 'calendar' | 'granola' | 'github'; url: string; id?: string } | null | undefined): string | null {
   if (!source) return null
   if (source.id) return source.id
   if (source.app === 'granola') return source.url.match(/\/d\/([^/?#]+)/)?.[1] ?? null
@@ -235,7 +235,7 @@ export interface Watched {
 }
 
 /** Open tasks from a mail that wait on someone: tagged #esperando, or found as "esperas respuesta". */
-export function watchedTasks(tasks: { id: string; status: string; tags: string[]; createdAt: number; source?: { app: 'gmail' | 'calendar' | 'granola'; url: string; id?: string; waiting?: boolean } | null }[]): Watched[] {
+export function watchedTasks(tasks: { id: string; status: string; tags: string[]; createdAt: number; source?: { app: 'gmail' | 'calendar' | 'granola' | 'github'; url: string; id?: string; waiting?: boolean } | null }[]): Watched[] {
   const out: Watched[] = []
   for (const t of tasks) {
     if (t.status === 'done' || t.source?.app !== 'gmail') continue

@@ -22,6 +22,9 @@ import type { Meeting } from './ai/meeting'
 import { hideSnoozed, snoozedCount } from './lib/snooze'
 import { NoticeContext, useNoticeValue } from './lib/teach'
 import { useEventLog } from './memory/log'
+import { GithubLine, type GithubJob } from './github/GithubLine'
+import { rememberRepo, shortRef } from './github/link'
+import { claudeHost } from './ai/config'
 
 // The memory is its own view: loaded the first time it opens, so the sheet stays light.
 const MemoryView = lazy(() => import('./memory/MemoryView'))
@@ -349,6 +352,47 @@ export default function App() {
     return true
   }, [])
 
+  /** Alt+G: the task as a GitHub issue (shown first), or, once done, closing the issue it's linked to. */
+  const [githubJob, setGithubJob] = useState<GithubJob | null>(null)
+  const toGithub = useCallback(
+    (taskId: string | null) => {
+      const tasks = latest.current.tasks
+      const task = taskId ? tasks.find((t) => t.id === taskId) : undefined
+      if (!task?.text.trim()) return
+      if (!claudeHost()) {
+        notify('GitHub solo está disponible dentro de claude.ai')
+        return
+      }
+      const linked = task.source?.app === 'github' ? task.source : null
+      if (linked && task.status !== 'done') {
+        notify(`Ya está en GitHub: ${shortRef(linked)} · ${A}O lo abre`)
+        return
+      }
+      if (task.source && !linked) {
+        notify('Esta tarea ya enlaza a su origen; pega la URL de un issue en otra tarea para vincularla')
+        return
+      }
+      if (!linked && task.status === 'done') return
+      returnTo.current = null
+      setGithubJob(linked ? { kind: 'close', task } : { kind: 'create', task, tasks })
+    },
+    [notify],
+  )
+  const endGithub = (job: GithubJob | null) => {
+    setGithubJob(null)
+    if (job) requestAnimationFrame(() => dispatch({ type: 'focus', id: job.task.id }))
+  }
+
+  // Completing a task linked to an issue leaves the issue alone; it only says how to close it too.
+  const prevStatus = useRef(new Map<string, string>())
+  useEffect(() => {
+    const before = prevStatus.current
+    const now = new Map(state.tasks.filter((t) => t.source?.app === 'github').map((t) => [t.id, t.status]))
+    prevStatus.current = now
+    const closed = state.tasks.find((t) => t.source?.app === 'github' && t.status === 'done' && before.has(t.id) && before.get(t.id) !== 'done')
+    if (closed?.source && claudeHost()) notify(`${shortRef(closed.source)} sigue abierto en GitHub · ${A}G lo cierra`)
+  }, [state.tasks, notify])
+
   const extraActions = useCallback(
     (taskId: string): QuickItem[] => {
       const task = state.tasks.find((t) => t.id === taskId)
@@ -357,8 +401,16 @@ export default function App() {
         ...(inbox.available
           ? [{ label: RECOGER, hint: `${A}I`, keywords: 'ia ai correo gmail email agenda calendario calendar recoger bandeja invitaciones granola reuniones notas actas', run: () => void recoger() }]
           : []),
+        ...(name && claudeHost() && (!task?.source || (task.source.app === 'github' && task.status === 'done'))
+          ? [{
+              label: task?.source ? `Cerrar ${shortRef(task.source)} en GitHub` : 'Llevar a GitHub',
+              hint: `${A}G`,
+              keywords: 'github issue crear llevar exportar repo repositorio cerrar',
+              run: () => toGithub(taskId),
+            }]
+          : []),
         ...(task?.source
-          ? [{ label: 'Abrir el correo, evento o nota de origen', hint: `${A}O`, keywords: 'abrir origen correo gmail evento calendario granola nota reunion', run: () => {
+          ? [{ label: task.source.app === 'github' ? `Abrir ${shortRef(task.source)} en GitHub` : 'Abrir el correo, evento o nota de origen', hint: `${A}O`, keywords: 'abrir origen correo gmail evento calendario granola nota reunion', run: () => {
               dispatch({ type: 'focus', id: taskId })
               requestAnimationFrame(() => openSource())
             } }]
@@ -422,7 +474,7 @@ export default function App() {
         { label: 'Importar copia', hint: `${M}O`, keywords: 'backup json abrir cargar restaurar', run: openImport },
       ]
     },
-    [state.tasks, templates, focusId, toggleFocusMode, saveTemplate, removeTemplate, notify, dispatch, copySummary, exportAll, openImport, ai.available, aiMode, aiHasKey, forgetKey, openAi, planDay, writeSummary, inbox.available, recoger, openSource, draftFor, meetingItems],
+    [state.tasks, templates, focusId, toggleFocusMode, saveTemplate, removeTemplate, notify, dispatch, copySummary, exportAll, openImport, ai.available, aiMode, aiHasKey, forgetKey, openAi, planDay, writeSummary, inbox.available, recoger, openSource, draftFor, meetingItems, toGithub],
   )
 
   const setView = useCallback((v: View) => setPrefs((p) => ({ ...p, view: v })), [setPrefs])
@@ -499,6 +551,9 @@ export default function App() {
         void recoger()
       } else if (e.altKey && e.code === 'KeyO') {
         if (openSource()) e.preventDefault()
+      } else if (e.altKey && e.code === 'KeyG') {
+        e.preventDefault()
+        toGithub(activeTaskId())
       }
     }
     // Dropping a backup file anywhere on the page imports it.
@@ -519,7 +574,7 @@ export default function App() {
       window.removeEventListener('dragover', onDragOver)
       window.removeEventListener('drop', onDrop)
     }
-  }, [dispatch, setView, setPrefs, exportAll, openImport, importFile, toggleFocusMode, copySummary, planDay, writeSummary, recoger, openSource, draftFor])
+  }, [dispatch, setView, setPrefs, exportAll, openImport, importFile, toggleFocusMode, copySummary, planDay, writeSummary, recoger, openSource, draftFor, toGithub])
 
   // Keep the heading right when the tab stays open past midnight.
   useEffect(() => {
@@ -730,6 +785,23 @@ export default function App() {
                   }
                 : null
             }
+          />
+        )}
+
+        {githubJob && (
+          <GithubLine
+            job={githubJob}
+            onCreate={async (owner, repo, title, body) => (await import('./github/client')).createIssue(owner, repo, title, body)}
+            onClose={async (ref) => (await import('./github/client')).closeIssue(ref)}
+            onDone={(job, created) => {
+              if (created) {
+                dispatch({ type: 'link', id: job.task.id, source: { app: 'github', url: created.url, id: `${created.ref.owner}/${created.ref.repo}#${created.ref.number}` } })
+                rememberRepo(job.task, created.repo)
+                notify(`Issue creado: ${created.ref.repo}#${created.ref.number} · ${A}O lo abre`)
+              } else if (job.task.source) notify(`${shortRef(job.task.source)} cerrado en GitHub`)
+              endGithub(job)
+            }}
+            onCancel={() => endGithub(githubJob)}
           />
         )}
 

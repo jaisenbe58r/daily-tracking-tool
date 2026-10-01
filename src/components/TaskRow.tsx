@@ -8,9 +8,10 @@ import { daysAway, daysWaiting, isBack, isSnoozed, WAITING_TAG } from '../lib/sn
 import { dueLabel } from '../lib/parse'
 import { useNotice } from '../lib/teach'
 import { useHasDraft } from '../ai/drafts'
+import { githubSource, parseGithubUrl, refId, shortRef } from '../github/link'
 
-const SOURCE_APP: Record<Source['app'], string> = { gmail: 'Gmail', calendar: 'Google Calendar', granola: 'Granola' }
-const SOURCE_LABEL: Record<Source['app'], string> = { gmail: 'Gmail', calendar: 'Agenda', granola: 'Granola' }
+const SOURCE_APP: Record<Source['app'], string> = { gmail: 'Gmail', calendar: 'Google Calendar', granola: 'Granola', github: 'GitHub' }
+const SOURCE_LABEL: Record<Source['app'], string> = { gmail: 'Gmail', calendar: 'Agenda', granola: 'Granola', github: 'GitHub' }
 
 interface Props {
   row: Row
@@ -49,7 +50,7 @@ function isSingleLine(el: HTMLTextAreaElement) {
 
 function TaskRowImpl({ row, focus, dragging, dispatch, onOpenActions, onDragStart, structural, inherit, activeTag, onTagClick, faded }: Props) {
   const today = useToday()
-  const { teach } = useNotice()
+  const { teach, notify } = useNotice()
   const drafted = useHasDraft(row.task.id)
   const stale = isStale(row.task, today)
   const { task, depth, hasChildren, lastPath, context, dimmed } = row
@@ -152,6 +153,20 @@ function TaskRowImpl({ row, focus, dragging, dispatch, onOpenActions, onDragStar
   // Several lines pasted at once become several tasks, nested by their indentation.
   const onPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const text = e.clipboardData.getData('text/plain')
+    // A GitHub issue or pull request link links the task to it instead of becoming its text.
+    const issue = parseGithubUrl(text)
+    if (issue) {
+      e.preventDefault()
+      dispatch({ type: 'link', id: task.id, source: githubSource(issue) })
+      notify(`Vinculada a ${refId(issue)} · ${isMac ? '⌥' : 'Alt+'}O lo abre`)
+      // An empty task takes the issue's title, when GitHub can be asked (inside claude.ai, with the connector).
+      if (!task.text.trim())
+        void import('../github/client')
+          .then(({ readIssue }) => readIssue(issue))
+          .then(({ title }) => title && dispatch({ type: 'link', id: task.id, source: githubSource(issue), title }))
+          .catch(() => {})
+      return
+    }
     if (!/\n\s*\S/.test(text.trim())) return
     e.preventDefault()
     dispatch({ type: 'commit', id: task.id })
@@ -316,7 +331,7 @@ function TaskRowImpl({ row, focus, dragging, dispatch, onOpenActions, onDragStar
               tabIndex={-1}
               title={`${task.source.quote ? `«${task.source.quote}»\n` : ''}Abrir en ${SOURCE_APP[task.source.app]} (${isMac ? '⌥' : 'Alt+'}O)`}
             >
-              {SOURCE_LABEL[task.source.app]}
+              {task.source.app === 'github' ? shortRef(task.source) : SOURCE_LABEL[task.source.app]}
               <svg width="8" height="8" viewBox="0 0 8 8" aria-hidden>
                 <path d="M2 6l4-4M3 2h3v3" fill="none" stroke="currentColor" strokeWidth="1.1" />
               </svg>

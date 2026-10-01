@@ -80,6 +80,8 @@ Las propuestas se van dibujando mientras llegan. En pantallas táctiles, «IA»,
 
 **Cerrar el bucle**: las tareas que esperan una respuesta (con `#esperando` o las que Recoger sacó de un correo tuyo sin contestar) se vigilan en esa misma pasada. Cuando llega la respuesta, la cabecera lo dice («1 respuesta en tu correo») y Recoger propone marcar la tarea como hecha y, si la respuesta pide algo, añadir el siguiente paso.
 
+**Llevar a GitHub** (`Alt+G`, o `/` → Llevar a GitHub): convierte la tarea en un issue. Antes de enviar nada enseña el issue tal como saldrá: el título es la tarea, el cuerpo sus notas y sus subtareas como checklist de GitHub. La línea lleva el repositorio (`owner/repo`); la app recuerda el de cada tag. `Enter` lo crea, `Esc` cancela. La tarea queda vinculada (`zimvie#42 ↗`, `Alt+O` lo abre). Pegar en una tarea la URL de un issue o una PR la vincula sin escribir nada en GitHub. Completar una tarea vinculada no toca el issue: el aviso dice que `Alt+G` lo cierra. Solo dentro de claude.ai, con GitHub añadido como conector personalizado (servidor `https://api.githubcopilot.com/mcp/`).
+
 **Borrador listo** (`Alt+D`, o `/` → «Preparar borrador»): para una tarea que consiste en escribir a alguien, la app redacta el correo con tu tono a partir del hilo del que salió (o un recordatorio amable si estás esperando). Dentro de claude.ai las tareas que vienen de un correo ya lo traen preparado, y la fila lo marca con un ✎ discreto. `Enter` lo copia; `Alt+O` abre el correo para pegarlo. Escribe en la línea para pedir otra versión («más corto»). Nunca se envía nada desde la app.
 
 **Preparar reunión** (`/` → «Preparar reunión…»): elige una reunión de hoy o mañana y la app propone una nota corta (de qué va, qué se habló la última vez con esas personas, qué les debes) y hasta cuatro subtareas, en la tarea de la reunión o en una nueva. Con Granola conectado, también lee tus notas de las últimas reuniones (hasta 3, de los dos últimos meses) con alguno de los asistentes.
@@ -96,7 +98,7 @@ Al modelo solo le llega tu petición y una lista compacta de las tareas (texto, 
    ```
 
    `AI_MODEL` cambia el modelo (por defecto `anthropic/claude-haiku-4-5`; también vale `openai/...` o `google/...` con su clave).
-2. **Dentro de claude.ai** (la vista previa publicada como artifact): usa Claude con tu propia cuenta. No hace falta clave; claude.ai te pide permiso la primera vez. Para Recoger, el artifact se publica con las capacidades `sample` y `mcp` (conectores `Gmail`: `search_threads`, `get_thread`; `Google Calendar`: `list_events`; `Granola`: `list_meetings`, `get_meetings`), y claude.ai pide permiso una vez por conector.
+2. **Dentro de claude.ai** (la vista previa publicada como artifact): usa Claude con tu propia cuenta. No hace falta clave; claude.ai te pide permiso la primera vez. Para Recoger, el artifact se publica con las capacidades `sample` y `mcp` (conectores `Gmail`: `search_threads`, `get_thread`; `Google Calendar`: `list_events`; `Granola`: `list_meetings`, `get_meetings`; `GitHub`: `issue_write`, `issue_read`), y claude.ai pide permiso una vez por conector.
 3. **Clave en el navegador** (una copia local o en un hosting estático, sin servidor): la primera vez que pides algo a la IA, la línea te pide tu clave de Anthropic. Se guarda solo en ese navegador (`localStorage`) y el navegador llama directamente a Anthropic. En `/`, «Olvidar la clave de la IA» la borra. `VITE_AI_MODEL` cambia el modelo (por defecto `claude-haiku-4-5`).
 
 Sin ninguna de las tres, la app funciona igual.
@@ -125,6 +127,7 @@ Sin ninguna de las tres, la app funciona igual.
 | `Alt+T` | Vista Hoy |
 | `Alt+I` | Recoger tareas del correo y la agenda (dentro de claude.ai) |
 | `Alt+D` | Borrador del correo de la tarea (se copia, no se envía) |
+| `Alt+G` | Llevar la tarea a GitHub como issue, o cerrar el issue de una tarea hecha |
 | `Alt+O` | Abrir el correo o evento del que salió la tarea |
 | `Cmd/Ctrl+K` | Captura global |
 | `Cmd/Ctrl+F` | Buscar |

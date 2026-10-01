@@ -128,7 +128,7 @@ export function applyOps(
       if (op.ref) ids.set(op.ref.trim(), task.id)
       const depth = parentId && depthOf.has(parentId) ? depthOf.get(parentId)! + 1 : 0
       depthOf.set(task.id, depth)
-      const from = task.source ? { gmail: 'gmail', calendar: 'agenda', granola: 'granola' }[task.source.app] : ''
+      const from = task.source ? { gmail: 'gmail', calendar: 'agenda', granola: 'granola', github: 'github' }[task.source.app] : ''
       const detail = [task.tags.map((t) => `#${t}`).join(' '), task.due ?? '', task.priority ? '!' : '', from].filter(Boolean).join(' ')
       changes.push({ kind: 'add', text, depth, detail })
       continue
