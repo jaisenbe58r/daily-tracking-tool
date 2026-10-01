@@ -93,7 +93,7 @@ export async function createGmailDraft(task: Task, body: string): Promise<string
   const me = new Set(style?.me ? [style.me] : [])
   const head = thread?.messages?.length
     ? replyHeaders(thread, me)
-    : { to: emailsIn(`${task.text}\n${task.notes}`).filter((a) => !me.has(a)), cc: [], subject: task.text.replace(/(^|\s)[@#]\S+/g, ' ').replace(/\s+/g, ' ').trim() }
+    : { to: emailsIn(`${task.text}\n${task.notes}`).filter((a) => !me.has(a)), cc: [], subject: subjectFrom(task.text) }
   const draft = await createDraft({ ...head, body: withSignature(body, style?.signature ?? '') })
   if (!draft) return null
   return draft.viewUrl || DRAFTS_URL
@@ -195,4 +195,20 @@ export function usePrefetchDrafts(mode: AiMode | null, ready: boolean, tasks: Ta
     }, 4000)
     return () => clearTimeout(timer)
   }, [mode, ready, tasks])
+}
+
+/** A new mail's subject from its task: «Responder a ana@x.com sobre la demo Captia #captia» → «La demo Captia». */
+export function subjectFrom(text: string): string {
+  const plain = text
+    .replace(/\S+@\S+\.\S+/g, ' ')
+    .replace(/(^|\s)[#!]\S*/g, ' ')
+    .replace(/(^|\s)@(\S+)/g, ' $2')
+    .replace(/\s+/g, ' ')
+    .trim()
+  const rest = plain
+    .replace(/^(responder|contestar|escribir|mandar|enviar|reenviar|correo|email|mail)( un (correo|email|mail))?( a)?\s*/i, '')
+    .replace(/^(sobre|de|del|acerca de|por)\s+/i, '')
+    .trim()
+  const out = rest || plain
+  return out.charAt(0).toUpperCase() + out.slice(1)
 }

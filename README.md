@@ -31,7 +31,7 @@ Al pulsar Enter (o salir de la línea), el texto se interpreta:
 
 **Hoy** (`Alt+T`, o «Hoy» encima de la lista) muestra solo lo planificado para hoy o vencido, más lo que has cerrado hoy. `Alt+H` planifica o desplanifica la tarea actual para hoy.
 
-**Captura global** (`Cmd/Ctrl+K`): una línea flotante para apuntar algo sin perder el sitio. Enter la guarda (con la misma gramática) y el cursor vuelve a donde estabas; `Esc` la descarta.
+**Captura global** (`Cmd/Ctrl+K`): una línea flotante para apuntar algo sin perder el sitio. Enter la guarda (con la misma gramática) y el cursor vuelve a donde estabas; `Esc` la descarta. Al escribir `#` propone los tags que ya usas y con `@` las personas ya mencionadas y los días (`Tab` o `Enter` completa, `↑`/`↓` elige, `Esc` lo cierra).
 
 **Buscar** (`Cmd/Ctrl+F`): filtra al escribir por texto, notas y tags, sin acentos y con las palabras en cualquier orden. Enter salta al primer resultado; `Esc` limpia la búsqueda.
 
@@ -47,11 +47,13 @@ Al pulsar Enter (o salir de la línea), el texto se interpreta:
 
 **Hoy a cero**: junto a «Hoy», un número pequeño dice lo que queda para hoy. Al cerrar la última, un aviso verde lo celebra y recuerda `Alt+R`.
 
+**Atajos abajo**: la barra del pie enseña los atajos de lo que estás haciendo (con varias tareas seleccionadas, los de la selección). «Todos», o `?` fuera del texto, abre la lista completa.
+
 **Los atajos se enseñan solos**: si haces con el ratón o desde `/` algo que tiene tecla, un aviso breve te la dice. Solo las tres primeras veces de cada acción.
 
 **Resumen del día** (`Alt+R`): copia al portapapeles un Markdown con lo hecho hoy (con su proyecto) y lo que está en curso, listo para pegar en un chat o un correo.
 
-**Memoria** (`Alt+M`, o `/` → «Abrir la memoria»): la hoja compilada en páginas enlazadas, al estilo del LLM Wiki de Karpathy. Cada tarea con dos o más subtareas es un **proyecto**, cada `#tema` y cada `@persona` escrita en una tarea (`Llamar a @luis`) tiene su página, y cada día una entrada de **diario**. En cada página, la **Trama** cruza lo relacionado con las semanas: una fila lleva a esa página, una celda al día. El **Panorama** resume cómo trabajas en cinco gráficos (Pulso, Estratos, Vuelo, Deriva y Balance). `/` busca, `←`/`→` pasan de día, `Alt+←` vuelve por el recorrido, `Esc` regresa al folio y pulsar una tarea te lleva a ella. Nada se escribe en la memoria: se recalcula de la hoja y de un historial de cambios que la app guarda sola en el navegador (IndexedDB) y que va dentro de la copia JSON.
+**Memoria** (`Alt+M`, o `/` → «Abrir la memoria»): la hoja compilada en páginas enlazadas, al estilo del LLM Wiki de Karpathy. Cada tarea con dos o más subtareas es un **proyecto**, cada `#tema` y cada `@persona` escrita en una tarea (`Llamar a @luis`) tiene su página, y cada día una entrada de **diario**. En cada página, la **Trama** cruza lo relacionado con las semanas: una fila lleva a esa página, una celda al día. La **Trama** de toda la hoja tiene su entrada en el índice, debajo de Panorama. El **Panorama** resume cómo trabajas en cinco gráficos (Pulso, Estratos, Vuelo, Deriva y Balance). `/` busca, `←`/`→` pasan de día, `Alt+←` vuelve por el recorrido, `Esc` regresa al folio y pulsar una tarea te lleva a ella. Nada se escribe en la memoria: se recalcula de la hoja y de un historial de cambios que la app guarda sola en el navegador (IndexedDB) y que va dentro de la copia JSON.
 
 **Plantillas**: en `/`, «Guardar como plantilla» guarda la tarea con sus subtareas; luego «Plantilla · nombre» la inserta (sin estados ni fechas). Para borrar una, escribe «borrar» en el menú. Las plantillas viajan en la copia JSON.
 
@@ -123,11 +125,15 @@ Sin ninguna de las tres, la app funciona igual.
 | `Cmd/Ctrl+Enter` | Completar o reabrir |
 | `Shift+Enter` | Nota de la tarea (`Esc` vuelve al texto) |
 | `#tag` | Escribir `#algo` en el texto lo convierte en tag al pulsar Enter o salir |
-| `/` | Acciones rápidas (en curso, subtarea, colapsar, mover, eliminar…) |
+| `/` | Acciones rápidas (en curso, subtarea, colapsar, mover, eliminar…): al principio de la línea, tras un espacio o al final (salvo tras un número, para `3/10`); sin línea activa, sobre la última tarea |
+| `Cmd/Ctrl+/` | Acciones rápidas desde cualquier punto del texto |
 | `↑` / `↓` | Moverse entre tareas |
 | `Alt+Shift+↑/↓` | Mover la tarea entre sus hermanas |
 | `Cmd/Ctrl+.` | Colapsar / expandir hijos |
 | `Backspace` en una tarea vacía | Borrarla |
+| `Cmd/Ctrl+Shift+Backspace` | Borrar la tarea (también la `×` al pasar por encima) |
+| `Shift+↑/↓` al borde del texto · `Shift+clic` · `Cmd/Ctrl+clic` | Seleccionar varias tareas: `Backspace` las borra, `Cmd/Ctrl+Enter` las completa, `Esc` sale. `Cmd/Ctrl+A` dos veces las selecciona todas |
+| `?` | Todos los atajos (o «Todos» en la barra de abajo) |
 | `Cmd/Ctrl+Z` · `Cmd/Ctrl+Shift+Z` | Deshacer · rehacer (texto y estructura) |
 | `Alt+H` | Planificar para hoy (o quitarlo) |
 | `Alt+L` | Posponer (o devolver una pospuesta) |

@@ -45,11 +45,12 @@ function allKeys({ ai, inbox }: Pick<Props, 'ai' | 'inbox'>): [string, Key[]][] 
       [`${A}T`, 'vista Hoy'],
       [`${A}L`, 'posponer'],
       [`${A}F`, 'modo foco'],
+      [`${A}J`, 'ir a «Ahora» del plan'],
       [`${A}R`, 'copiar resumen'],
     ]],
     ...(ai || inbox
       ? [['IA y correo', [
-          ...(ai ? ([[`${M}K ${M}↵`, 'pedir a la IA'], [`${A}P`, 'plan del día'], [`${A}D`, 'borrador'], [`${A}${S}R`, 'resumen redactado']] as Key[]) : []),
+          ...(ai ? ([[`${M}K ${M}↵`, 'pedir a la IA'], [`${A}P`, 'plan del día'], [`${A}D`, 'borrador'], [`${A}G`, 'borrador a Gmail'], [`${A}${S}R`, 'resumen redactado']] as Key[]) : []),
           ...(inbox ? ([[`${A}I`, 'recoger correo y agenda'], [`${A}O`, 'abrir el origen']] as Key[]) : []),
         ]] as [string, Key[]]]
       : []),
