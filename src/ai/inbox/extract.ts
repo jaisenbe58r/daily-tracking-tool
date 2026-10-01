@@ -18,6 +18,8 @@ export interface Found {
   replies: number
   /** Tasks the model gave for a meeting note without words the note really says: left out. */
   dropped: number
+  /** What the check read, in one line («Gmail 187 hilos · Agenda 6 eventos · …»). */
+  scan?: string
 }
 
 export const RECOGER_LABEL = 'Recoger del correo y la agenda'
