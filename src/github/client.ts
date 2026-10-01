@@ -19,7 +19,7 @@ export function github(): Promise<Mcp | null> {
   return mcp
 }
 
-async function call(tool: string, input: unknown): Promise<unknown> {
+export async function call(tool: string, input: unknown): Promise<unknown> {
   const m = await github()
   if (!m) throw Object.assign(new Error('no github'), { code: 'server_not_connected' })
   return (await m.callTool(GITHUB, tool, input, { cache: false })).payload

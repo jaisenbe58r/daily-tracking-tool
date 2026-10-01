@@ -46,31 +46,46 @@ export function useInbox(mode: AiMode | null, tasks: Task[], today: string) {
     }
   }, [mode])
 
+  /**
+   * One look at every source: mail, calendar and notes through Claude, GitHub
+   * as it is. Read and nothing to do: marked seen, so it isn't read again.
+   * `skip` returns undefined when the sources hold just what's already waiting.
+   */
+  const look = useCallback(async (skip: boolean): Promise<{ found: Found | null; problem?: string } | null | undefined> => {
+    const { tasks, today } = latest.current
+    const [{ gather }, { githubFound }] = await Promise.all([import('./connectors'), import('../../github/inbox')])
+    const [gathered, gh] = await Promise.all([
+      gather(isSeen, watchedTasks(tasks), knownNotes(tasks)),
+      githubFound(tasks, today, isSeen).catch(() => ({ found: null as Found | null, problem: undefined })),
+    ])
+    checkedAt.current = Date.now()
+    if (!gathered) return null
+    const { candidates, problems } = gathered
+    const problem = problems[0] ?? gh.problem
+    // Same threads and items as the proposal already waiting: nothing new to ask Claude about.
+    const keys = new Set([...candidates.map((c) => `${c.id}@${c.version}`), ...(gh.found?.keys ?? [])])
+    const waiting = latest.current.found
+    if (skip && keys.size && waiting && waiting.keys.length === keys.size && waiting.keys.every((k) => keys.has(k))) return undefined
+    let mail: Found | null = null
+    if (candidates.length) {
+      const { extract } = await import('./extract')
+      mail = await extract('claude', tasks, today, candidates)
+    }
+    const found = merge(mail, gh.found)
+    if (found && !found.count) {
+      markSeen(found.keys)
+      return { found: null, problem }
+    }
+    return { found, problem }
+  }, [])
+
   const check = useCallback((): Promise<void> => {
     if (running.current) return running.current
     const run = (async () => {
-      const { gather } = await import('./connectors')
-      const gathered = await gather(isSeen, watchedTasks(latest.current.tasks), knownNotes(latest.current.tasks))
-      checkedAt.current = Date.now()
-      if (!gathered) return
-      const { candidates, problems } = gathered
-      setProblem(problems[0] ?? null)
-      if (!candidates.length) {
-        setFound(null)
-        return
-      }
-      // Same threads as the proposal already waiting: nothing new to ask Claude about.
-      const keys = new Set(candidates.map((c) => `${c.id}@${c.version}`))
-      const waiting = latest.current.found
-      if (waiting && waiting.keys.length === keys.size && waiting.keys.every((k) => keys.has(k))) return
-      const { extract } = await import('./extract')
-      const next = await extract('claude', latest.current.tasks, latest.current.today, candidates)
-      if (next.count) setFound(next)
-      else {
-        // Read and nothing to do: don't read these again.
-        markSeen(next.keys)
-        setFound(null)
-      }
+      const looked = await look(true)
+      if (!looked) return
+      setProblem(looked.problem ?? null)
+      setFound(looked.found)
     })()
       .catch(() => {
         /* a quiet background check: the next one tries again, and «Recoger» says what failed */
@@ -80,7 +95,7 @@ export function useInbox(mode: AiMode | null, tasks: Task[], today: string) {
       })
     running.current = run
     return run
-  }, [setFound])
+  }, [setFound, look])
 
   // In the background: soon after opening, then every 15 minutes while the page is in view.
   useEffect(() => {
@@ -101,20 +116,15 @@ export function useInbox(mode: AiMode | null, tasks: Task[], today: string) {
   const take = useCallback(async (): Promise<Taken> => {
     if (running.current) await running.current
     else if (!latest.current.found && Date.now() - checkedAt.current > FRESH_MS) {
-      const { gather } = await import('./connectors')
-      const gathered = await gather(isSeen, watchedTasks(latest.current.tasks), knownNotes(latest.current.tasks))
-      checkedAt.current = Date.now()
-      if (!gathered) return { none: true, problem: 'Esta página no puede leer tu correo aquí' }
-      setProblem(gathered.problems[0] ?? null)
-      if (!gathered.candidates.length) return { none: true, problem: gathered.problems[0] }
-      const { extract } = await import('./extract')
-      const next = await extract('claude', latest.current.tasks, latest.current.today, gathered.candidates)
-      if (next.count) setFound(next)
-      else markSeen(next.keys)
+      const looked = await look(false)
+      if (looked === null) return { none: true, problem: 'Esta página no puede leer tu correo aquí' }
+      setProblem(looked?.problem ?? null)
+      if (!looked?.found) return { none: true, problem: looked?.problem }
+      setFound(looked.found)
     }
     const waiting = latest.current.found
     return waiting ? { found: waiting } : { none: true, problem: problem ?? undefined }
-  }, [problem, setFound])
+  }, [problem, setFound, look])
 
   /** The user has seen these (accepted or not): they won't be proposed again. */
   const clear = useCallback(
@@ -126,5 +136,22 @@ export function useInbox(mode: AiMode | null, tasks: Task[], today: string) {
   )
 
   const meetings = found?.ops.filter((op) => op.op === 'add' && op.source?.app === 'granola').length ?? 0
-  return { available, count: found?.count ?? 0, replies: found?.replies ?? 0, meetings, take, clear }
+  const github = found?.github ?? 0
+  return { available, count: found?.count ?? 0, replies: found?.replies ?? 0, meetings, github, take, clear }
+}
+
+/** Mail, calendar and notes (read by Claude) and GitHub (read as is) in one proposal. Both use the same sheet refs. */
+export function merge(mail: Found | null, gh: Found | null): Found | null {
+  if (!mail || !gh) return mail ?? gh
+  const summary = [mail.count ? mail.summary : '', gh.count ? gh.summary : ''].filter(Boolean).join(' · ')
+  return {
+    summary,
+    ops: [...mail.ops, ...gh.ops],
+    refs: mail.refs,
+    keys: [...mail.keys, ...gh.keys],
+    count: mail.count + gh.count,
+    replies: mail.replies,
+    dropped: mail.dropped,
+    github: gh.github,
+  }
 }

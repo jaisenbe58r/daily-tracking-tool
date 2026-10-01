@@ -515,7 +515,7 @@ export default function App() {
       const name = task?.text.trim()
       return [
         ...(inbox.available
-          ? [{ label: RECOGER, hint: `${A}I`, keywords: 'ia ai correo gmail email agenda calendario calendar recoger bandeja invitaciones granola reuniones notas actas', run: () => void recoger() }]
+          ? [{ label: RECOGER, hint: `${A}I`, keywords: 'ia ai correo gmail email agenda calendario calendar recoger bandeja invitaciones granola reuniones notas actas github issues pull requests revisiones', run: () => void recoger() }]
           : []),
         ...(name && claudeHost() && (!task?.source || (task.source.app === 'github' && task.status === 'done'))
           ? [{
@@ -818,7 +818,7 @@ export default function App() {
                   <span className="word">
                     {' '}
                     {!inbox.replies
-                      ? `${inbox.count === 1 ? 'tarea' : 'tareas'} ${inbox.meetings === inbox.count ? 'de tus reuniones' : inbox.meetings ? 'por recoger' : 'en tu correo'}`
+                      ? `${inbox.count === 1 ? 'tarea' : 'tareas'} ${inbox.github === inbox.count ? 'en GitHub' : inbox.meetings === inbox.count ? 'de tus reuniones' : inbox.meetings || inbox.github ? 'por recoger' : 'en tu correo'}`
                       : inbox.replies === inbox.count
                         ? `${inbox.count === 1 ? 'respuesta' : 'respuestas'} en tu correo`
                         : 'novedades en tu correo'}

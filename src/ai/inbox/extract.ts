@@ -16,6 +16,8 @@ export interface Found {
   count: number
   /** Of those, waiting tasks someone has answered: proposed as done. */
   replies: number
+  /** Of those, from GitHub (new items and linked issues now closed). */
+  github?: number
   /** Tasks the model gave for a meeting note without words the note really says: left out. */
   dropped: number
 }
