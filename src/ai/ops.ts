@@ -19,6 +19,8 @@ export interface Op {
   due?: string | null
   priority?: boolean
   status?: Status
+  /** Planning the day: why this task, in a few words. Shown in the plan, never stored on the task. */
+  why?: string
   /** Set by the app, never by the model: the mail or event an added task came from. */
   source?: Source
 }
@@ -128,7 +130,7 @@ export function applyOps(
       if (op.ref) ids.set(op.ref.trim(), task.id)
       const depth = parentId && depthOf.has(parentId) ? depthOf.get(parentId)! + 1 : 0
       depthOf.set(task.id, depth)
-      const from = task.source ? { gmail: 'gmail', calendar: 'agenda', granola: 'granola' }[task.source.app] : ''
+      const from = task.source ? { gmail: 'gmail', calendar: 'agenda', granola: 'granola', github: 'github' }[task.source.app] : ''
       const detail = [task.tags.map((t) => `#${t}`).join(' '), task.due ?? '', task.priority ? '!' : '', from].filter(Boolean).join(' ')
       changes.push({ kind: 'add', text, depth, detail })
       continue
@@ -168,6 +170,14 @@ export function applyOps(
   const placeholder = tasks.length === 1 && !tasks[0].text.trim() ? tasks[0] : null
   if (placeholder && out.length > 1 && !tree.hasChildren(out, placeholder.id)) out = out.filter((t) => t.id !== placeholder.id)
   return { tasks: out, changes }
+}
+
+/** The existing tasks the proposal touches, in its order, with the reason it gave (Plan del día). */
+export function picksOf(ops: Op[], refs: Map<string, string>): { id: string; why?: string }[] {
+  return ops.flatMap((op) => {
+    const id = op.op === 'update' && op.id ? refs.get(op.id.trim()) : undefined
+    return id ? [{ id, ...(op.why?.trim() ? { why: op.why.trim() } : {}) }] : []
+  })
 }
 
 /** Task ids for the refs the agent picked (`t3`), in its order, skipping unknown ones. */

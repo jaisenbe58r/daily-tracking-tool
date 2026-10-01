@@ -53,6 +53,9 @@ export interface CalendarEvent {
   updated?: string
   htmlLink?: string
   start?: { dateTime?: string; date?: string }
+  end?: { dateTime?: string; date?: string }
+  /** `transparent`: the event doesn't block the time. */
+  transparency?: string
   organizer?: { email?: string; self?: boolean }
   attendees?: { email?: string; self?: boolean; responseStatus?: string }[]
 }
@@ -74,12 +77,15 @@ function isCalendarMail(m: GmailMessage): boolean {
   return CALENDAR_MAIL.test((m.subject ?? '').trim())
 }
 
+/** Where the quoted history of a reply starts. */
+export const QUOTE_START = /^(On .+wrote:|El .+escribi[oó]:|-{2,}\s*(Original Message|Mensaje original)|De: .+|From: .+|________________)/i
+
 /** The new part of a reply: quoted history, signatures and legal footers go. */
 export function cleanBody(text: string): string {
   const lines: string[] = []
   for (const line of text.replace(/\r/g, '').split('\n')) {
     const t = line.trim()
-    if (/^(On .+wrote:|El .+escribi[oó]:|-{2,}\s*(Original Message|Mensaje original)|De: .+|From: .+|________________)/i.test(t)) break
+    if (QUOTE_START.test(t)) break
     if (t.startsWith('>')) continue
     if (t === '--' || t === '-- ') break
     lines.push(line)
@@ -203,7 +209,7 @@ export function describeCandidates(list: Candidate[], refOf: Map<string, string>
  * older ones only have the link: Gmail's `thread-f:<decimal>` is the thread id
  * in hex, and Calendar's `eid` is base64 of "<event id> <calendar>".
  */
-export function sourceId(source: { app: 'gmail' | 'calendar' | 'granola'; url: string; id?: string } | null | undefined): string | null {
+export function sourceId(source: { app: 'gmail' | 'calendar' | 'granola' | 'github'; url: string; id?: string } | null | undefined): string | null {
   if (!source) return null
   if (source.id) return source.id
   if (source.app === 'granola') return source.url.match(/\/d\/([^/?#]+)/)?.[1] ?? null
@@ -235,7 +241,7 @@ export interface Watched {
 }
 
 /** Open tasks from a mail that wait on someone: tagged #esperando, or found as "esperas respuesta". */
-export function watchedTasks(tasks: { id: string; status: string; tags: string[]; createdAt: number; source?: { app: 'gmail' | 'calendar' | 'granola'; url: string; id?: string; waiting?: boolean } | null }[]): Watched[] {
+export function watchedTasks(tasks: { id: string; status: string; tags: string[]; createdAt: number; source?: { app: 'gmail' | 'calendar' | 'granola' | 'github'; url: string; id?: string; waiting?: boolean } | null }[]): Watched[] {
   const out: Watched[] = []
   for (const t of tasks) {
     if (t.status === 'done' || t.source?.app !== 'gmail') continue
@@ -266,4 +272,29 @@ export function replyCandidate(thread: GmailThread, w: Watched, me: Set<string>)
     url: thread.viewUrl ?? '',
     taskId: w.taskId,
   }
+}
+
+/** Everyone in a thread but the user (and robots), as plain addresses, first seen first. */
+export function participants(thread: GmailThread, me: Set<string>): string[] {
+  const all = (thread.messages ?? []).flatMap((m) => [m.sender, ...(m.toRecipients ?? []), ...(m.ccRecipients ?? [])])
+  return [...new Set(all.filter((v): v is string => Boolean(v) && !AUTOMATED.test(v!)).map(address))].filter((a) => a.includes('@') && !me.has(a))
+}
+
+/**
+ * Who a reply to the thread goes to: whoever wrote last (or, if it was the user,
+ * the people they wrote to), the rest in copy. `me` grows with the thread's own
+ * sent messages, so it works even before the user's address is known.
+ */
+export function replyHeaders(thread: GmailThread, me: Set<string>): { to: string[]; cc: string[]; subject: string; replyToMessageId?: string } {
+  const msgs = thread.messages ?? []
+  const self = new Set(me)
+  for (const m of msgs) if (m.labelIds?.includes('SENT') && m.sender) self.add(address(m.sender))
+  const last = lastOf(msgs)
+  const subject = (msgs.find((m) => m.subject)?.subject ?? '').trim()
+  const clean = (list: (string | undefined)[]) => [...new Set(list.filter((v): v is string => Boolean(v)).map(address))].filter((a) => a.includes('@') && !self.has(a))
+  if (!last) return { to: [], cc: [], subject }
+  const mine = self.has(address(last.sender))
+  const to = mine ? clean(last.toRecipients ?? []) : clean([last.sender])
+  const cc = clean([...(mine ? [] : (last.toRecipients ?? [])), ...(last.ccRecipients ?? [])]).filter((a) => !to.includes(a))
+  return { to, cc, subject: !subject || /^(re|rv|fw|fwd)\s*:/i.test(subject) ? subject : `Re: ${subject}`, ...(last.id ? { replyToMessageId: last.id } : {}) }
 }
